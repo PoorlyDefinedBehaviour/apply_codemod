@@ -3,7 +3,11 @@ module apply_codemod
 go 1.16
 
 require (
-	github.com/google/go-github/v38 v38.1.0
-	github.com/spf13/pflag v1.0.5
-	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9 // indirect
+	github.com/go-git/go-git/v5 v5.4.2
+	github.com/google/go-github/v39 v39.0.0
+	github.com/google/uuid v1.3.0
+	github.com/pkg/errors v0.9.1
+	github.com/stretchr/testify v1.7.0
+	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4 // indirect
+	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f
 )
