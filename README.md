@@ -68,7 +68,7 @@ func main() {
 
 	flag.Parse()
 
-	if accessToken == nil {
+	if *accessToken == "" {
 		panic("github access token is required")
 	}
 
