@@ -2,7 +2,6 @@ package codemod_test
 
 import (
 	"apply_codemod/src/codemod"
-	"fmt"
 	"go/ast"
 	"testing"
 
@@ -126,8 +125,7 @@ func Test_RewriteErrorsWrapfToFmtErrorf(t*testing.T){
 				Value: 
 				codemod.Quote(
 					codemod.Unquote(
-						newArgs[0].(*ast.BasicLit).Value + ": %w",
-					),
+						newArgs[0].(*ast.BasicLit).Value) + ": %w",
 				),
 			}
 
@@ -141,7 +139,7 @@ func Test_RewriteErrorsWrapfToFmtErrorf(t*testing.T){
 			}			
 			
 			// rewrite the ast and call fmt.Errorf instead of errors.Wrap
-			call.Replace(&ast.ExprStmt{X: newCall})
+			call.Replace(newCall)
 		}
 	}
 
@@ -153,10 +151,26 @@ func Test_RewriteErrorsWrapfToFmtErrorf(t*testing.T){
 		}
 	}
 
+	expected := 
+`package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+var errSomething = errors.New("oops")
+
+func foo() error {
+	return fmt.Errorf("some context: %w", errSomething)
+}
+
+func main() {
+
+}
+`
+
 	updatedSourceCode := string(file.SourceCode())
 
-
-	fmt.Printf("\n\naaaaaaa updatedSourceCode %+v\n\n", updatedSourceCode)
-
-	t.Fail()
+	assert.Equal(t, expected, updatedSourceCode)
 }

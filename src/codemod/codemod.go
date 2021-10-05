@@ -144,7 +144,7 @@ type Replacement interface {
 	CallExpr() *ast.CallExpr
 }
 
-func (call *FunctionCall) Replace(node ast.Stmt) {
+func (call *FunctionCall) Replace(node ast.Expr) {
 	funDecl := call.Parent.FindUpstreamNode(&ast.FuncDecl{})
 
 	block := funDecl.Node.(*ast.FuncDecl).Body
@@ -157,7 +157,7 @@ func (call *FunctionCall) Replace(node ast.Stmt) {
 			if ok &&
 				reflect.DeepEqual(callExpr.Fun, call.Node.Fun) &&
 				reflect.DeepEqual(callExpr.Args, call.Node.Args) {
-				block.List[i] = node
+				block.List[i] = &ast.ExprStmt{X:node}
 			}
 
 		case *ast.ReturnStmt:
@@ -167,7 +167,7 @@ func (call *FunctionCall) Replace(node ast.Stmt) {
 				if ok &&
 					reflect.DeepEqual(callExpr.Fun, call.Node.Fun) &&
 					reflect.DeepEqual(callExpr.Args, call.Node.Args) {
-					block.List[i] = node
+					value.Results[i] = node.(ast.Expr)
 				}
 			}
 		}
