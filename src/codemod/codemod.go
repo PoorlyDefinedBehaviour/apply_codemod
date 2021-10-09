@@ -41,8 +41,6 @@ func SourceCode(node ast.Node) string {
 	return buffer.String()
 }
 
-
-
 func FromSourceCode(sourceCode string) ast.Expr {
 	ast, err := parser.ParseExpr(sourceCode)
 	if err != nil {
@@ -101,7 +99,7 @@ func (imports *Imports) Paths() []string {
 	return out
 }
 
-func (imports *Imports) Some(predicate func(string)bool) bool {
+func (imports *Imports) Some(predicate func(string) bool) bool {
 	for _, path := range imports.Paths() {
 		if predicate(path) {
 			return true
@@ -137,7 +135,7 @@ func (code *SourceFile) Imports() Imports {
 
 type FunctionCall struct {
 	Parent NodeWithParent
-	Node    *ast.CallExpr
+	Node   *ast.CallExpr
 }
 
 type Replacement interface {
@@ -157,7 +155,7 @@ func (call *FunctionCall) Replace(node ast.Expr) {
 			if ok &&
 				reflect.DeepEqual(callExpr.Fun, call.Node.Fun) &&
 				reflect.DeepEqual(callExpr.Args, call.Node.Args) {
-				block.List[i] = &ast.ExprStmt{X:node}
+				block.List[i] = &ast.ExprStmt{X: node}
 			}
 
 		case *ast.ReturnStmt:
@@ -199,6 +197,7 @@ func (call *FunctionCall) Remove() {
 	}
 }
 
+// TODO: refactor me to use SourceFile.FunctionCalls()
 func (code *SourceFile) FindCalls(target string) map[Scope][]FunctionCall {
 	out := make(map[Scope][]FunctionCall)
 
@@ -231,13 +230,70 @@ func (code *SourceFile) FindCalls(target string) map[Scope][]FunctionCall {
 	return out
 }
 
+func (code *SourceFile) FunctionCalls() map[Scope][]FunctionCall {
+	out := make(map[Scope][]FunctionCall)
+
+	var parent NodeWithParent
+	var scope Scope
+
+	ast.Inspect(
+		code.file,
+		func(node ast.Node) bool {
+			switch value := node.(type) {
+			case *ast.FuncDecl:
+				scope = Scope{fun: value}
+
+			case *ast.CallExpr:
+				out[scope] = append(out[scope], FunctionCall{Node: value, Parent: parent})
+			}
+
+			p := parent
+			parent = NodeWithParent{
+				Parent: &p,
+				Node:   node,
+			}
+
+			return true
+		},
+	)
+
+	return out
+}
+
+type Function struct {
+	Parent NodeWithParent
+	Node   *ast.FuncDecl
+}
+
+func (code *SourceFile) Functions() []Function {
+	out := make([]Function, 0)
+
+	var parent NodeWithParent
+
+	ast.Inspect(
+		code.file,
+		func(node ast.Node) bool {
+			switch value := node.(type) {
+			case *ast.FuncDecl:
+				out = append(out, Function{Node: value, Parent: parent})
+			}
+
+			p := parent
+			parent = NodeWithParent{
+				Parent: &p,
+				Node:   node,
+			}
+
+			return true
+		},
+	)
+
+	return out
+}
+
 type Map struct {
 	Expr NodeWithParent
 }
-
-
-
-
 
 func (m *Map) Has(key string) bool {
 	composite := m.Expr.Node.(*ast.CompositeLit)
@@ -320,7 +376,6 @@ func (code *SourceFile) FindIfStatements() map[Scope][]IfStmt {
 	var parent NodeWithParent
 	var scope Scope
 
-	
 	ast.Inspect(
 		code.file,
 		func(node ast.Node) bool {
@@ -330,7 +385,7 @@ func (code *SourceFile) FindIfStatements() map[Scope][]IfStmt {
 
 			case *ast.IfStmt:
 				p := parent
-					out[scope] = append(out[scope], IfStmt(NodeWithParent{Parent: &p, Node: node}))
+				out[scope] = append(out[scope], IfStmt(NodeWithParent{Parent: &p, Node: node}))
 
 			}
 
@@ -433,7 +488,6 @@ type Struct struct {
 type Value struct {
 	Expr ast.Expr
 }
-
 
 func (struct_ *Struct) Field(key string) Value {
 	for _, element := range struct_.literal.Elts {
