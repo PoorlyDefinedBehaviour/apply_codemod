@@ -188,14 +188,17 @@ func Codemods(targets []Target) error {
 }
 
 func buildDescription(target *Target) string {
-	descriptions := make([]string, len(target.Codemods))
+	builder := strings.Builder{}
 
-	for _, codemod := range target.Codemods {
-		descriptions = append(descriptions, codemod.Description)
+	builder.WriteString("Applied the following codemods:\n\n")
+
+	for i, codemod := range target.Codemods {
+		builder.WriteString(fmt.Sprintf("λ %s", codemod.Description))
+
+		if i < len(target.Codemods)-1 {
+			builder.WriteString("\n\n")
+		}
 	}
 
-	return fmt.Sprintf(
-		"Applied the following codemods: %s",
-		strings.Join(descriptions, "\n\nλ "),
-	)
+	return builder.String()
 }
