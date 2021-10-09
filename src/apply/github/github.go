@@ -9,6 +9,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+
 	googlegithub "github.com/google/go-github/v39/github"
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
@@ -58,6 +59,24 @@ func (repo *Repository) Add(options AddOptions) error {
 	}
 
 	return nil
+}
+
+func (repo *Repository) FilesAffected() (files []string, err error) {
+	worktree, err := repo.repo.Worktree()
+	if err != nil {
+		return files, errors.WithStack(err)
+	}
+
+	status, err := worktree.Status()
+	if err != nil {
+		return files, errors.WithStack(err)
+	}
+
+	for fileName := range status {
+		files = append(files, fileName)
+	}
+
+	return files, nil
 }
 
 type CommitOptions struct {
@@ -148,18 +167,21 @@ type PullRequestOptions struct {
 	Description string
 }
 
-func (github *T) PullRequest(options PullRequestOptions) error {
+func (github *T) PullRequest(options PullRequestOptions) (*googlegithub.PullRequest, error) {
 	repoInfo := parseRepoURL(options.RepoURL)
 
-	_, _, err := github.client.PullRequests.Create(context.Background(), repoInfo.Owner, repoInfo.Name, &googlegithub.NewPullRequest{
+	pullRequest, _, err := github.client.PullRequests.Create(context.Background(), repoInfo.Owner, repoInfo.Name, &googlegithub.NewPullRequest{
 		Title:               googlegithub.String(options.Title),
 		Head:                googlegithub.String(options.FromBranch),
 		Base:                googlegithub.String(options.ToBranch),
 		Body:                googlegithub.String(options.Description),
 		MaintainerCanModify: googlegithub.Bool(true),
 	})
+	if err != nil {
+		return pullRequest, errors.WithStack(err)
+	}
 
-	return errors.WithStack(err)
+	return pullRequest, nil
 }
 
 type RepoInfo struct {
