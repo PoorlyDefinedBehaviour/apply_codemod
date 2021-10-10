@@ -181,6 +181,10 @@ func Test_IfContextIsTheLastArgumentItBecomesTheFirst(t *testing.T) {
 
 	import "context"
 
+	type UserService interface {
+		DoSomething(int64, context.Context) error
+	}
+
 	func buz(userID int64, ctx context.Context) error {
 		return nil
 	}
@@ -256,10 +260,26 @@ func Test_IfContextIsTheLastArgumentItBecomesTheFirst(t *testing.T) {
 		}
 	}
 
+	for _, typeDecl := range file.TypeDeclarations() {
+		for _, method := range typeDecl.Methods() {
+			params := method.Params()
+
+			for i, param := range params {
+				if codemod.SourceCode(param.Type) == "context.Context" {
+					params[0], params[i] = params[i], params[0]
+				}
+			}
+		}
+	}
+
 	expected :=
 		`package main
 
 import "context"
+
+type UserService interface {
+	DoSomething(context.Context, int64) error
+}
 
 func buz(ctx context.Context, userID int64) error {
 	return nil
@@ -391,4 +411,321 @@ func TestSourceFile_Functions(t *testing.T) {
 			assert.Empty(t, file.Functions())
 		})
 	})
+}
+
+func Test_TypeDeclarations(t *testing.T) {
+	t.Parallel()
+
+	t.Run("when there are no type declarations", func(t *testing.T) {
+		t.Run("returns nothing", func(t *testing.T) {
+			file := codemod.New([]byte(`
+			package main
+
+			func main(){}
+		`))
+
+			assert.Empty(t, file.TypeDeclarations())
+		})
+	})
+
+	t.Run("when there are type declarations", func(t *testing.T) {
+		t.Run("returns interfaces", func(t *testing.T) {
+			file := codemod.New([]byte(`
+			package main
+
+			type UserService interface {}
+
+			func main(){}
+		`))
+
+			declarations := file.TypeDeclarations()
+
+			assert.Equal(t, 1, len(declarations))
+			assert.Equal(t, "UserService", declarations[0].Node.Name.Name)
+		})
+
+		t.Run("returns structs", func(t *testing.T) {
+			file := codemod.New([]byte(`
+			package main
+
+			type UserService struct {}
+
+			func main(){}
+		`))
+
+			declarations := file.TypeDeclarations()
+
+			assert.Equal(t, 1, len(declarations))
+			assert.Equal(t, "UserService", declarations[0].Node.Name.Name)
+		})
+
+		t.Run("returns type aliases", func(t *testing.T) {
+			file := codemod.New([]byte(`
+			package main
+
+			type UserID int64
+
+			func main(){}
+		`))
+
+			declarations := file.TypeDeclarations()
+
+			assert.Equal(t, 1, len(declarations))
+			assert.Equal(t, "UserID", declarations[0].Node.Name.Name)
+		})
+	})
+}
+
+func TestTypeDeclaration_Methods(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		code     string
+		expected []string
+	}{
+		{
+			code: `
+					package foo
+
+					type Interface interface {}
+
+					type Struct struct {}
+
+					type Foo int
+					`,
+			expected: []string{},
+		},
+		{
+			code: `
+				package main
+
+				import "context"
+
+				type Interface interface {
+					Foo(int64, context.Context) error
+					Bar()
+					Baz(int) string
+				}
+
+				func main(){}
+			`,
+			expected: []string{"Foo", "Bar", "Baz"},
+		},
+		{
+			code: `
+				package foo
+
+				type User struct {}
+
+				func (user *User) IsAdmin() bool { return false }
+				func (user User) Something() {}
+			`,
+			expected: []string{"IsAdmin", "Something"},
+		},
+		{
+			code: `
+				package foo
+
+				type ID int64
+
+				func (id *ID) A() string { return "hello" }
+				func (id ID) B() error { return nil }
+			`,
+			expected: []string{"A", "B"},
+		},
+	}
+
+	for _, tt := range tests {
+		declarations := codemod.New([]byte(tt.code)).TypeDeclarations()
+
+		assert.NotEmpty(t, declarations)
+
+		for _, declaration := range declarations {
+			for i := range tt.expected {
+				assert.Equal(t, tt.expected[i], declaration.Methods()[i].Name())
+			}
+		}
+	}
+}
+
+func TestTypeDeclaration_IsInterface(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		code     string
+		expected bool
+	}{
+		{
+			code: `
+				package main 
+
+				type User struct{}
+			`,
+			expected: false,
+		},
+		{
+			code: `
+				package main 
+
+				type UserID int64
+			`,
+			expected: false,
+		},
+		{
+			code: `
+				package main 
+
+				type I interface {}
+			`,
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, codemod.New([]byte(tt.code)).TypeDeclarations()[0].IsInterface())
+	}
+}
+
+func TestTypeDeclaration_IsStruct(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		code     string
+		expected bool
+	}{
+		{
+			code: `
+				package main 
+
+				type User struct{}
+			`,
+			expected: true,
+		},
+		{
+			code: `
+				package main 
+
+				type UserID int64
+			`,
+			expected: false,
+		},
+		{
+			code: `
+				package main 
+
+				type I interface {}
+			`,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, codemod.New([]byte(tt.code)).TypeDeclarations()[0].IsStruct())
+	}
+}
+
+func TestTypeDeclaration_IsTypeAlias(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		code     string
+		expected bool
+	}{
+		{
+			code: `
+				package main
+
+				type User struct{}
+			`,
+			expected: false,
+		},
+		{
+			code: `
+				package main 
+
+				type UserID int64
+			`,
+			expected: true,
+		},
+		{
+			code: `
+				package main
+
+				type I interface {}
+			`,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, codemod.New([]byte(tt.code)).TypeDeclarations()[0].IsTypeAlias())
+	}
+}
+
+func TestMethod_Name(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		code     string
+		expected string
+	}{
+		{
+			code: `
+				package main
+
+				type I interface {
+					Foo(int64) int64
+				}
+				`,
+			expected: "Foo",
+		},
+		{
+			code: `
+				package main
+
+				type S struct {}
+
+				func (s *S) Bar() {}
+				`,
+			expected: "Bar",
+		},
+		{
+			code: `
+				package main
+
+				type S struct {}
+
+				func (s S) Bar() {}
+				`,
+			expected: "Bar",
+		},
+		{
+			code: `
+			package main 
+
+			type T int64
+
+			func (t T) Baz() {}
+			`,
+			expected: "Baz",
+		},
+		{
+			code: `
+			package main 
+
+			type T int64
+
+			func (t *T) Baz() {}
+			`,
+			expected: "Baz",
+		},
+	}
+
+	for _, tt := range tests {
+		declarations := codemod.New([]byte(tt.code)).TypeDeclarations()
+
+		actual := declarations[0].Methods()[0].Name()
+
+		assert.Equal(t, tt.expected, actual)
+	}
 }
