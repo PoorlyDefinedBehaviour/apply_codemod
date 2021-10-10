@@ -3,6 +3,7 @@ package codemod_test
 import (
 	"apply_codemod/src/codemod"
 	"go/ast"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -112,32 +113,16 @@ func Test_RewriteErrorsWrapfToFmtErrorf(t *testing.T) {
 
 	for _, calls := range scopedCalls {
 		for _, call := range calls {
-			originalArgs := call.Node.Args
+			args := call.Node.Args
 
-			// swap first and last arguments
-			newArgs := originalArgs[1:]
+			args[0], args[len(args)-1] = args[len(args)-1], args[0]
 
-			newArgs = append(newArgs, originalArgs[0])
+			args[0].(*ast.BasicLit).Value = codemod.Quote(codemod.Unquote(args[0].(*ast.BasicLit).Value) + ": %w")
 
-			// add the error format to the string
-			newArgs[0] = &ast.BasicLit{
-				Value: codemod.Quote(
-					codemod.Unquote(
-						newArgs[0].(*ast.BasicLit).Value) + ": %w",
-				),
+			call.Node.Fun = &ast.SelectorExpr{
+				X:   &ast.Ident{Name: "fmt"},
+				Sel: &ast.Ident{Name: "Errorf"},
 			}
-
-			// ast node representing fmt.Errorf(...)
-			newCall := &ast.CallExpr{
-				Fun: &ast.SelectorExpr{
-					X:   &ast.Ident{Name: "fmt"},
-					Sel: &ast.Ident{Name: "Errorf"},
-				},
-				Args: newArgs,
-			}
-
-			// rewrite the ast and call fmt.Errorf instead of errors.Wrap
-			call.Replace(newCall)
 		}
 	}
 
@@ -212,26 +197,23 @@ func Test_IfContextIsTheLastArgumentItBecomesTheFirst(t *testing.T) {
 	// example:
 	// func foo(x int) {}
 	for _, function := range file.Functions() {
+		params := function.Params()
+
 		// for each function parameter
 		// example:
 		// func(x int, y string) {}
 		// we would go through x and then y
-		for i, parameter := range function.Node.Type.Params.List {
-			selector, ok := parameter.Type.(*ast.SelectorExpr)
-			if !ok {
-				continue
-			}
-
+		for i, param := range params {
 			// we are looking for the type Context from any package.
 			// we will match these two for example:
 			// context.Context
 			// othercontext.Context
-			if selector.Sel.Name != "Context" {
+			if !strings.HasSuffix(codemod.SourceCode(param.Type), ".Context") {
 				continue
 			}
 
 			// swap context with first position argument
-			function.Node.Type.Params.List[0], function.Node.Type.Params.List[i] = function.Node.Type.Params.List[i], function.Node.Type.Params.List[0]
+			params[0], params[i] = params[i], params[0]
 		}
 	}
 
