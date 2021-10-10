@@ -260,6 +260,113 @@ func (code *SourceFile) FunctionCalls() map[Scope][]FunctionCall {
 	return out
 }
 
+type TypeDeclaration struct {
+	Parent NodeWithParent
+	Node   *ast.TypeSpec
+}
+
+func (typeDecl *TypeDeclaration) IsInterface() bool {
+	_, ok := typeDecl.Node.Type.(*ast.InterfaceType)
+	return ok
+}
+
+func (typeDecl *TypeDeclaration) IsStruct() bool {
+	_, ok := typeDecl.Node.Type.(*ast.StructType)
+	return ok
+}
+
+func (typeDecl *TypeDeclaration) IsTypeAlias() bool {
+	return !typeDecl.IsInterface() && !typeDecl.IsStruct()
+}
+
+type Method struct {
+	Node ast.Node
+}
+
+func (method *Method) Params() []*ast.Field {
+	return method.Node.(*ast.Field).Type.(*ast.FuncType).Params.List
+}
+
+func (method *Method) Name() string {
+	switch node := method.Node.(type) {
+	case *ast.FuncDecl:
+		return node.Name.Name
+	case *ast.Field:
+		return node.Names[0].Name
+	default:
+		panic(fmt.Sprintf("node is not a method: %+v", method.Node))
+	}
+}
+
+func (typeDecl *TypeDeclaration) Methods() []Method {
+	out := make([]Method, 0)
+
+	if typeDecl.IsInterface() {
+		node := typeDecl.Node.Type.(*ast.InterfaceType)
+
+		for _, method := range node.Methods.List {
+			out = append(out, Method{Node: method})
+		}
+	}
+
+	if typeDecl.IsStruct() || typeDecl.IsTypeAlias() {
+		file := typeDecl.Parent.FindUpstreamNode(&ast.File{})
+
+		for _, decl := range file.Node.(*ast.File).Decls {
+			if funDecl, ok := decl.(*ast.FuncDecl); ok {
+				if funDecl.Recv == nil {
+					continue
+				}
+
+				for _, receiver := range funDecl.Recv.List {
+					if pointerReceiver, ok := receiver.Type.(*ast.StarExpr); ok {
+						if pointerReceiver.X.(*ast.Ident).Name == typeDecl.Node.Name.Name {
+							out = append(out, Method{Node: funDecl})
+						}
+					}
+
+					if byCopyReceiver, ok := receiver.Type.(*ast.Ident); ok {
+						if byCopyReceiver.Name == typeDecl.Node.Name.Name {
+							out = append(out, Method{Node: funDecl})
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return out
+}
+
+func (code *SourceFile) TypeDeclarations() []TypeDeclaration {
+	out := make([]TypeDeclaration, 0)
+
+	parent := NodeWithParent{
+		Parent: nil,
+		Node:   code.file,
+	}
+
+	ast.Inspect(
+		code.file,
+		func(node ast.Node) bool {
+			switch value := node.(type) {
+			case *ast.TypeSpec:
+				out = append(out, TypeDeclaration{Node: value, Parent: parent})
+			}
+
+			p := parent
+			parent = NodeWithParent{
+				Parent: &p,
+				Node:   node,
+			}
+
+			return true
+		},
+	)
+
+	return out
+}
+
 type Function struct {
 	Parent NodeWithParent
 	Node   *ast.FuncDecl
