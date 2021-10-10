@@ -372,6 +372,10 @@ type Function struct {
 	Node   *ast.FuncDecl
 }
 
+func (function *Function) Params() []*ast.Field {
+	return function.Node.Type.Params.List
+}
+
 func (code *SourceFile) Functions() []Function {
 	out := make([]Function, 0)
 
