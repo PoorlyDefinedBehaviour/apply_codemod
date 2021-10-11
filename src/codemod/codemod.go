@@ -36,6 +36,61 @@ func normalizeString(s string) string {
 	return strings.ReplaceAll(s, " ", "")
 }
 
+func insertAfter(node NodeWithParent, newNode ast.Node) {
+	block := node.Parent.FindUpstreamNode(&ast.BlockStmt{}).Node.(*ast.BlockStmt)
+
+	newList := make([]ast.Stmt, 0, len(block.List))
+
+	for _, stmt := range block.List {
+		newList = append(newList, stmt)
+
+		if stmt == node.Node {
+			newList = append(newList, newNode.(ast.Stmt))
+		}
+	}
+
+	block.List = newList
+}
+
+func insertBefore(node NodeWithParent, newNode ast.Node) {
+	block := node.Parent.FindUpstreamNode(&ast.BlockStmt{}).Node.(*ast.BlockStmt)
+
+	newList := make([]ast.Stmt, 0, len(block.List))
+
+	for _, stmt := range block.List {
+		if stmt == node.Node {
+			newList = append(newList, newNode.(ast.Stmt))
+		}
+
+		newList = append(newList, stmt)
+	}
+
+	block.List = newList
+}
+
+func remove(node NodeWithParent) {
+	blockStmt := node.Parent.FindUpstreamNode(&ast.BlockStmt{})
+
+	if blockStmt == nil {
+		return
+	}
+
+	block := blockStmt.Node.(*ast.BlockStmt)
+
+	list := make([]ast.Stmt, 0)
+
+	for _, stmt := range block.List {
+		if stmt == node.Node {
+			continue
+		}
+
+		list = append(list, stmt)
+	}
+
+	block.List = list
+
+}
+
 func SourceCode(node ast.Node) string {
 	var buffer bytes.Buffer
 
@@ -499,24 +554,16 @@ type IfStmt struct {
 	Node   *ast.IfStmt
 }
 
+func (stmt *IfStmt) InsertAfter(node ast.Node) {
+	insertAfter(NodeWithParent{Parent: &stmt.Parent, Node: stmt.Node}, node)
+}
+
+func (stmt *IfStmt) InsertBefore(node ast.Node) {
+	insertBefore(NodeWithParent{Parent: &stmt.Parent, Node: stmt.Node}, node)
+}
+
 func (stmt *IfStmt) Remove() {
-	blockStmt := stmt.Parent.FindUpstreamNode(&ast.BlockStmt{})
-
-	if blockStmt == nil {
-		return
-	}
-
-	blockBody := blockStmt.Node.(*ast.BlockStmt)
-
-	newBlockBody := make([]ast.Stmt, 0)
-
-	for _, blockBodyStmt := range blockBody.List {
-		if blockBodyStmt != stmt.Node {
-			newBlockBody = append(newBlockBody, blockBodyStmt)
-		}
-	}
-
-	blockBody.List = newBlockBody
+	remove(NodeWithParent{Parent: &stmt.Parent, Node: stmt.Node})
 }
 
 func (stmt *IfStmt) RemoveCondition() {
@@ -619,35 +666,11 @@ type Assignment struct {
 }
 
 func (assignment *Assignment) InsertAfter(node ast.Node) {
-	block := assignment.Parent.FindUpstreamNode(&ast.BlockStmt{}).Node.(*ast.BlockStmt)
-
-	newList := make([]ast.Stmt, 0, len(block.List))
-
-	for _, stmt := range block.List {
-		newList = append(newList, stmt)
-
-		if stmt == assignment.Node {
-			newList = append(newList, node.(ast.Stmt))
-		}
-	}
-
-	block.List = newList
+	insertAfter(NodeWithParent{Parent: &assignment.Parent, Node: assignment.Node}, node)
 }
 
 func (assignment *Assignment) InsertBefore(node ast.Node) {
-	block := assignment.Parent.FindUpstreamNode(&ast.BlockStmt{}).Node.(*ast.BlockStmt)
-
-	newList := make([]ast.Stmt, 0, len(block.List))
-
-	for _, stmt := range block.List {
-		if stmt == assignment.Node {
-			newList = append(newList, node.(ast.Stmt))
-		}
-
-		newList = append(newList, stmt)
-	}
-
-	block.List = newList
+	insertBefore(NodeWithParent{Parent: &assignment.Parent, Node: assignment.Node}, node)
 }
 
 func (assignment *Assignment) Remove() {
