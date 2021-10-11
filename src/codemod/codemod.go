@@ -102,7 +102,41 @@ func SourceCode(node ast.Node) string {
 	return buffer.String()
 }
 
-func AstNodeFromSourceCode(sourceCode string) ast.Node {
+var x int = 1
+
+func zeroPositionInformation(value reflect.Value) {
+	if !value.IsValid() || value.IsZero() {
+		return
+	}
+
+	// TODO: something is causing infinite recursion in this function
+	// this is work around so we can test something that depends on this
+	if x > 1000 {
+		return
+	}
+	x++
+
+	if value.Type().Name() == "Pos" {
+		value.Set(reflect.Zero(value.Type()))
+	}
+
+	switch value.Kind() {
+	case reflect.Ptr, reflect.Interface:
+		if !value.IsNil() {
+			zeroPositionInformation(value.Elem())
+		}
+	case reflect.Struct:
+		for i := 0; i < value.NumField(); i++ {
+			zeroPositionInformation(value.Field(i))
+		}
+	case reflect.Array, reflect.Slice:
+		for i := 0; i < value.Len(); i++ {
+			zeroPositionInformation(value.Index(i))
+		}
+	}
+}
+
+func Ast(sourceCode string) ast.Node {
 	packageName := fmt.Sprintf("package_name_%d\n", time.Now().Nanosecond())
 	functionName := fmt.Sprintf("function_name_%d", time.Now().Nanosecond())
 
@@ -116,7 +150,19 @@ func AstNodeFromSourceCode(sourceCode string) ast.Node {
 
 	sourceFile := New([]byte(sourceCode))
 
-	return sourceFile.file.Decls[0].(*ast.FuncDecl).Body.List[0]
+	var node ast.Node
+
+	body := sourceFile.file.Decls[0].(*ast.FuncDecl).Body
+
+	if len(body.List) > 1 {
+		node = body
+	} else {
+		node = body.List[0]
+	}
+
+	zeroPositionInformation(reflect.ValueOf(node))
+
+	return node
 }
 
 func (code *SourceFile) SourceCode() []byte {
@@ -511,7 +557,11 @@ func (code *SourceFile) FindMapLiteral(mapType string) (*Scope, *Map) {
 
 func (code *SourceFile) FindMapLiterals(mapType string) map[Scope][]Map {
 	out := make(map[Scope][]Map)
-	var parent NodeWithParent
+
+	parent := NodeWithParent{
+		Node: code.file,
+	}
+
 	var scope Scope
 
 	mapTypeExpr, err := parser.ParseExpr(mapType)
@@ -522,6 +572,12 @@ func (code *SourceFile) FindMapLiterals(mapType string) map[Scope][]Map {
 	ast.Inspect(
 		code.file,
 		func(node ast.Node) bool {
+			p := parent
+			parent = NodeWithParent{
+				Parent: &p,
+				Node:   node,
+			}
+
 			switch value := node.(type) {
 			case *ast.FuncDecl:
 				scope = Scope{fun: value}
@@ -534,12 +590,6 @@ func (code *SourceFile) FindMapLiterals(mapType string) map[Scope][]Map {
 					p := parent
 					out[scope] = append(out[scope], Map{Expr: NodeWithParent{Parent: &p, Node: node}})
 				}
-			}
-
-			p := parent
-			parent = NodeWithParent{
-				Parent: &p,
-				Node:   node,
 			}
 
 			return true
@@ -576,7 +626,7 @@ func (stmt *IfStmt) RemoveCondition() {
 	blockStmt.Node.(*ast.BlockStmt).List = stmt.Node.Body.List
 }
 
-func (code *SourceFile) FindIfStatements() map[Scope][]IfStmt {
+func (code *SourceFile) IfStatements() map[Scope][]IfStmt {
 	out := make(map[Scope][]IfStmt)
 	var parent NodeWithParent
 	var scope Scope
