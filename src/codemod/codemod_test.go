@@ -2,6 +2,7 @@ package codemod_test
 
 import (
 	"apply_codemod/src/codemod"
+	"fmt"
 	"go/ast"
 	"strings"
 	"testing"
@@ -64,28 +65,146 @@ func Test_Map(t *testing.T) {
 func Test_FindIfStatements(t *testing.T) {
 	t.Parallel()
 
-	// sourceCode := []byte(`
-	// package main
+	t.Run("finds if statement", func(t *testing.T) {
+		t.Parallel()
 
-	// func main() {
-	// 	if true {
-	// 		println(2)
-	// 	}
-	// }
-	// `)
+		file := codemod.New([]byte(`
+		package main
 
-	t.Run("foo", func(t *testing.T) {
-		// for _, statements := range codemod.New(sourceCode).FindIfStatements() {
-		// 	for _, statement := range statements {
-		// 		// if statement.Condition().SourceCode() == "true" {
-		// 		// 	statement.Remove()
-		// 		// }
-		// 		{
+		func main() {
+			if true { }
+		}
+	`))
 
-		// 		}
-		// 	}
-		// }
+		scopedStatements := file.FindIfStatements()
+
+		assert.Equal(t, 1, len(scopedStatements))
+
+		for _, statements := range scopedStatements {
+			assert.Equal(t, 1, len(statements))
+
+			for _, statement := range statements {
+				assert.Equal(t, "true", codemod.SourceCode(statement.Node.Cond))
+			}
+		}
 	})
+
+	t.Run("removal", func(t *testing.T) {
+		sourceCode := []byte(`
+		package main
+
+		func main() {
+			if true {
+				println(2)
+			}
+		}
+	`)
+
+		t.Run("removes if statement", func(t *testing.T) {
+			file := codemod.New(sourceCode)
+
+			for _, statements := range file.FindIfStatements() {
+				for _, statement := range statements {
+					statement.Remove()
+				}
+			}
+
+			expected := "package main\n\nfunc main() {\n\n}\n"
+
+			actual := string(file.SourceCode())
+
+			assert.Equal(t, expected, actual)
+		})
+
+		t.Run("removes only if statement condition", func(t *testing.T) {
+			file := codemod.New(sourceCode)
+
+			for _, statements := range file.FindIfStatements() {
+				for _, statement := range statements {
+					statement.RemoveCondition()
+				}
+			}
+
+			expected := "package main\n\nfunc main() {\n\n\tprintln(2)\n\n}\n"
+
+			actual := string(file.SourceCode())
+
+			assert.Equal(t, expected, actual)
+		})
+	})
+}
+
+func Test_ReplaceDatabaseConnectionErrorIfStatement(t *testing.T) {
+	t.Parallel()
+
+	sourceCode := []byte(`
+	package database
+
+	import (
+		"database/sql"
+		"time"
+	
+		"github.com/go-sql-driver/mysql"
+		"github.com/pkg/errors"
+	)
+	
+	func Connect() (*sql.DB, error) {
+		config := mysql.Config{
+			User:   "mysql",
+			Passwd: "mysql",
+			DBName: "db",
+			Params: map[string]string{
+				"tx_isolation": "'READ-COMMITTED'",
+			},
+		}
+	
+		db, err := sql.Open("mysql", config.FormatDSN())
+		if err != nil {
+			return db, errors.WithStack(err)
+		}
+	
+		err = db.Ping()
+		if err != nil {
+			if mysqlErr, ok := err.(*mysql.MySQLError); !ok || mysqlErr.Number != 1193 {
+				return db, errors.WithStack(err)
+			}
+	
+			config.Params["tx_isolation"], config.Params["transaction_isolation"] = config.Params["transaction_isolation"], config.Params["tx_isolation"]
+	
+			db, err = sql.Open("mysql", config.FormatDSN())
+			if err != nil {
+				return db, errors.WithStack(err)
+			}
+		}
+	
+		db.SetConnMaxLifetime(time.Minute * 3)
+		db.SetMaxOpenConns(10)
+		db.SetMaxIdleConns(10)
+	
+		return db, nil
+	}	
+	`)
+
+	file := codemod.New(sourceCode)
+
+	for _, assignments := range file.FindAssignments(`config.Params`) {
+		if len(assignments) == 0 {
+			continue
+		}
+
+		// assignments[0].InsertAfter(codemod.AstNodeFromSourceCode(`
+		// if config.Params["tx_isolation"] == "" {
+		// 	delete(config.Params, "tx_isolation")
+		// }
+
+		// if config.Params["transaction_isolation"] == "" {
+		// 	delete(config.Params, "transaction_isolation")
+		// }
+		// `))
+
+	}
+
+	t.Fail()
 }
 
 func Test_RewriteErrorsWrapfToFmtErrorf(t *testing.T) {
@@ -707,6 +826,249 @@ func TestMethod_Name(t *testing.T) {
 		declarations := codemod.New([]byte(tt.code)).TypeDeclarations()
 
 		actual := declarations[0].Methods()[0].Name()
+
+		assert.Equal(t, tt.expected, actual)
+	}
+}
+
+func TestSourceFile_FindAssignments(t *testing.T) {
+	t.Parallel()
+
+	file := codemod.New([]byte(`
+			package main
+
+			func main() {
+				a := 1
+
+				b := make(map[string]string)
+
+				b["tx_isolation"] = "'READ-COMMITTED'"
+
+				c := struct{
+					x int
+				}{
+					x: 0,
+				}
+
+				c.x = 1
+
+				d := make([]int, 1)
+
+				d[0] = 10
+
+				d = append(d, 20)
+			}
+		`))
+
+	tests := []struct {
+		target   string
+		expected string
+	}{
+		{target: "a", expected: "a := 1"},
+		{target: "a := 1", expected: "a := 1"},
+		{target: "a:=1", expected: "a := 1"},
+		{target: "b := make(map[string]string)", expected: "b := make(map[string]string)"},
+		{target: `b["tx_isolation"]`, expected: `b["tx_isolation"] = "'READ-COMMITTED'"`},
+		{target: "c.x", expected: "c.x = 1"},
+		{target: "c.x = 1", expected: "c.x = 1"},
+		{target: "d[0]", expected: "d[0] = 10"},
+		{target: "d[0] = 10", expected: "d[0] = 10"},
+		{target: "d = append(d, 20)", expected: "d = append(d, 20)"},
+	}
+
+	for _, tt := range tests {
+		scopedAssignments := file.FindAssignments(tt.target)
+
+		assert.Equal(t, 1, len(scopedAssignments))
+
+		for _, assignments := range scopedAssignments {
+			assert.Equal(t, 1, len(assignments))
+
+			assert.Equal(t, tt.expected, codemod.SourceCode(assignments[0].Node))
+		}
+	}
+}
+
+func Test_Assignments(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		code     string
+		expected []string
+	}{
+		{
+			code: `
+			package main
+
+			func main() {}
+			`,
+			expected: []string{},
+		},
+		{
+			code: `
+			package main
+
+			func main() {
+				x := 1
+
+				x = 2
+			}
+			`,
+			expected: []string{"x := 1", "x = 2"},
+		},
+	}
+
+	for _, tt := range tests {
+		actual := codemod.New([]byte(tt.code)).Assignments()
+
+		for _, assignments := range actual {
+			assert.Equal(t, len(tt.expected), len(assignments))
+
+			for i := range tt.expected {
+				assert.Equal(t, tt.expected[i], codemod.SourceCode(assignments[i].Node))
+			}
+		}
+	}
+}
+
+func TestAstNodeFromSourceCode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		code     string
+		expected ast.Node
+	}{
+		{
+			code:     "x := 1",
+			expected: &ast.AssignStmt{},
+		},
+		{
+			code: `
+			if config.Params["tx_isolation"] == "" {
+				delete(config.Params, "tx_isolation")
+			}
+			`,
+			expected: &ast.IfStmt{},
+		},
+		{
+			code:     "type I interface {}",
+			expected: &ast.DeclStmt{},
+		},
+		{
+			code:     "type S struct {}",
+			expected: &ast.DeclStmt{},
+		},
+	}
+
+	for _, tt := range tests {
+		actual := codemod.AstNodeFromSourceCode(tt.code)
+
+		assert.Equal(t, fmt.Sprintf("%T", tt.expected), fmt.Sprintf("%T", actual))
+	}
+}
+
+func TestAssign_InsertAfter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		code     string
+		expected string
+	}{
+		{
+			code: "y := 2",
+			expected: `package main
+
+func main() {
+	x := 1
+	y := 2
+
+}
+`,
+		},
+		{
+			code: `
+				if config.Params["tx_isolation"] == "" {
+					delete(config.Params, "tx_isolation")
+				}
+			`,
+			expected: `package main
+
+func main() {
+	x := 1
+	if config.Params["tx_isolation"] == "" {
+		delete(config.Params, "tx_isolation")
+	}
+
+}
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		file := codemod.New([]byte(`
+		package main
+
+		func main() {
+			x := 1
+		}
+	`))
+
+		for _, assignments := range file.FindAssignments("x") {
+			for _, assignment := range assignments {
+				assignment.InsertAfter(codemod.AstNodeFromSourceCode(tt.code))
+			}
+		}
+
+		actual := string(file.SourceCode())
+
+		assert.Equal(t, tt.expected, actual)
+	}
+}
+
+func TestAssign_InsertBefore(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		code     string
+		expected string
+	}{
+		{
+			code: "y := 2",
+			expected: `package main
+
+func main() {
+	y := 2
+
+	x := 1
+}
+`,
+		},
+		{
+			code: `
+				if config.Params["tx_isolation"] == "" {
+					delete(config.Params, "tx_isolation")
+				}
+			`,
+			expected: "package main\n\nfunc main() {\n\tif config.Params[\"tx_isolation\"] == \"\" {\n\t\tdelete(config.Params, \"tx_isolation\")\n\t}\n\n\tx := 1\n}\n",
+		},
+	}
+
+	for _, tt := range tests {
+		file := codemod.New([]byte(`
+		package main
+
+		func main() {
+			x := 1
+		}
+	`))
+
+		for _, assignments := range file.FindAssignments("x") {
+			for _, assignment := range assignments {
+				assignment.InsertBefore(codemod.AstNodeFromSourceCode(tt.code))
+			}
+		}
+
+		actual := string(file.SourceCode())
 
 		assert.Equal(t, tt.expected, actual)
 	}

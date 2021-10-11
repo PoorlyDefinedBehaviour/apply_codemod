@@ -8,6 +8,8 @@ import (
 	"go/parser"
 	"go/token"
 	"reflect"
+	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -30,6 +32,10 @@ func New(sourceCode []byte) *SourceFile {
 	return &SourceFile{fileSet: fileSet, file: ast}
 }
 
+func normalizeString(s string) string {
+	return strings.ReplaceAll(s, " ", "")
+}
+
 func SourceCode(node ast.Node) string {
 	var buffer bytes.Buffer
 
@@ -41,13 +47,21 @@ func SourceCode(node ast.Node) string {
 	return buffer.String()
 }
 
-func FromSourceCode(sourceCode string) ast.Expr {
-	ast, err := parser.ParseExpr(sourceCode)
-	if err != nil {
-		panic(errors.WithStack(err))
+func AstNodeFromSourceCode(sourceCode string) ast.Node {
+	packageName := fmt.Sprintf("package_name_%d\n", time.Now().Nanosecond())
+	functionName := fmt.Sprintf("function_name_%d", time.Now().Nanosecond())
+
+	if !strings.Contains(sourceCode, "package") {
+		if !strings.Contains(sourceCode, "func") {
+			sourceCode = fmt.Sprintf("func %s() { %s }", functionName, sourceCode)
+		}
+
+		sourceCode = fmt.Sprintf("package %s %s", packageName, sourceCode)
 	}
 
-	return ast
+	sourceFile := New([]byte(sourceCode))
+
+	return sourceFile.file.Decls[0].(*ast.FuncDecl).Body.List[0]
 }
 
 func (code *SourceFile) SourceCode() []byte {
@@ -480,7 +494,40 @@ func (code *SourceFile) FindMapLiterals(mapType string) map[Scope][]Map {
 	return out
 }
 
-type IfStmt NodeWithParent
+type IfStmt struct {
+	Parent NodeWithParent
+	Node   *ast.IfStmt
+}
+
+func (stmt *IfStmt) Remove() {
+	blockStmt := stmt.Parent.FindUpstreamNode(&ast.BlockStmt{})
+
+	if blockStmt == nil {
+		return
+	}
+
+	blockBody := blockStmt.Node.(*ast.BlockStmt)
+
+	newBlockBody := make([]ast.Stmt, 0)
+
+	for _, blockBodyStmt := range blockBody.List {
+		if blockBodyStmt != stmt.Node {
+			newBlockBody = append(newBlockBody, blockBodyStmt)
+		}
+	}
+
+	blockBody.List = newBlockBody
+}
+
+func (stmt *IfStmt) RemoveCondition() {
+	blockStmt := stmt.Parent.FindUpstreamNode(&ast.BlockStmt{})
+
+	if blockStmt == nil {
+		return
+	}
+
+	blockStmt.Node.(*ast.BlockStmt).List = stmt.Node.Body.List
+}
 
 func (code *SourceFile) FindIfStatements() map[Scope][]IfStmt {
 	out := make(map[Scope][]IfStmt)
@@ -495,9 +542,7 @@ func (code *SourceFile) FindIfStatements() map[Scope][]IfStmt {
 				scope = Scope{fun: value}
 
 			case *ast.IfStmt:
-				p := parent
-				out[scope] = append(out[scope], IfStmt(NodeWithParent{Parent: &p, Node: node}))
-
+				out[scope] = append(out[scope], IfStmt{Parent: parent, Node: value})
 			}
 
 			p := parent
@@ -570,9 +615,39 @@ func (scope *Scope) FindCall(selector string) *FunctionCall {
 
 type Assignment struct {
 	Parent NodeWithParent
-	Stmt   *ast.AssignStmt
-	Lhs    []*ast.Ident
-	Rhs    []ast.Expr
+	Node   *ast.AssignStmt
+}
+
+func (assignment *Assignment) InsertAfter(node ast.Node) {
+	block := assignment.Parent.FindUpstreamNode(&ast.BlockStmt{}).Node.(*ast.BlockStmt)
+
+	newList := make([]ast.Stmt, 0, len(block.List))
+
+	for _, stmt := range block.List {
+		newList = append(newList, stmt)
+
+		if stmt == assignment.Node {
+			newList = append(newList, node.(ast.Stmt))
+		}
+	}
+
+	block.List = newList
+}
+
+func (assignment *Assignment) InsertBefore(node ast.Node) {
+	block := assignment.Parent.FindUpstreamNode(&ast.BlockStmt{}).Node.(*ast.BlockStmt)
+
+	newList := make([]ast.Stmt, 0, len(block.List))
+
+	for _, stmt := range block.List {
+		if stmt == assignment.Node {
+			newList = append(newList, node.(ast.Stmt))
+		}
+
+		newList = append(newList, stmt)
+	}
+
+	block.List = newList
 }
 
 func (assignment *Assignment) Remove() {
@@ -581,7 +656,7 @@ func (assignment *Assignment) Remove() {
 
 		stmts := make([]ast.Stmt, 0)
 		for _, stmt := range funDecl.Body.List {
-			if reflect.DeepEqual(stmt, assignment.Stmt) {
+			if reflect.DeepEqual(stmt, assignment.Node) {
 				continue
 			}
 
@@ -612,7 +687,7 @@ func (struct_ *Struct) Field(key string) Value {
 }
 
 func (assignment *Assignment) Struct() Struct {
-	composite := assignment.Rhs[0].(*ast.CompositeLit)
+	composite := assignment.Node.Lhs[0].(*ast.CompositeLit)
 	return Struct{literal: composite}
 }
 
@@ -633,55 +708,74 @@ func (assignment *Assignment) Replace(node ast.Stmt) {
 	}
 }
 
-func (code *SourceFile) FindAssignments(target string) map[Scope][]Assignment {
-	out := make(map[Scope][]Assignment)
+func (code *SourceFile) Assignments() map[Scope][]Assignment {
+	assignments := make(map[Scope][]Assignment, 0)
 
-	var parent NodeWithParent
+	parent := NodeWithParent{
+		Node: code.file,
+	}
 
 	var scope Scope
 
 	ast.Inspect(code.file, func(node ast.Node) bool {
+		p := parent
+		parent = NodeWithParent{
+			Parent: &p,
+			Node:   node,
+		}
+
 		switch value := node.(type) {
 		case *ast.FuncDecl:
 			scope = Scope{fun: value}
-
 		case *ast.BlockStmt:
 			for _, statement := range value.List {
 				stmt, ok := statement.(*ast.AssignStmt)
 				if ok {
-					lhss := make([]*ast.Ident, 0, len(stmt.Lhs))
+					assignments[scope] = append(assignments[scope], Assignment{
+						Parent: parent,
+						Node:   stmt,
+					})
+				}
+			}
+		}
 
-					for _, expr := range stmt.Lhs {
-						ident := expr.(*ast.Ident)
-						lhss = append(lhss, ident)
+		return true
+	})
+
+	return assignments
+
+}
+
+func (code *SourceFile) FindAssignments(target string) map[Scope][]Assignment {
+	out := make(map[Scope][]Assignment, 0)
+
+	for scope, assignments := range code.Assignments() {
+		for _, assignment := range assignments {
+			if normalizeString(SourceCode(assignment.Node)) == normalizeString(target) {
+				out[scope] = append(out[scope], assignment)
+				continue
+			}
+
+			for _, expr := range assignment.Node.Lhs {
+				switch ident := expr.(type) {
+				case *ast.SelectorExpr:
+					if normalizeString(SourceCode(ident)) == normalizeString(target) {
+						out[scope] = append(out[scope], assignment)
 					}
-
-					for _, ident := range lhss {
-						if ident.Name == target {
-							out[scope] = append(out[scope], Assignment{
-								Parent: parent,
-								Stmt:   stmt,
-								Lhs:    lhss,
-								Rhs:    stmt.Rhs,
-							})
-						}
+				case *ast.Ident:
+					if ident.Name == target {
+						out[scope] = append(out[scope], assignment)
+					}
+				case *ast.IndexExpr:
+					if normalizeString(SourceCode(ident.X)) == normalizeString(target) ||
+						normalizeString(SourceCode(ident)) == normalizeString(target) {
+						out[scope] = append(out[scope], assignment)
 					}
 
 				}
 			}
 		}
-
-		if node != nil {
-			p := parent
-			parent = NodeWithParent{
-				Parent: &p,
-				Node:   node,
-			}
-		}
-
-		return true
-	},
-	)
+	}
 
 	return out
 }
