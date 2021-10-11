@@ -165,16 +165,18 @@ func Test_ReplaceDatabaseConnectionErrorIfStatement(t *testing.T) {
 	
 		err = db.Ping()
 		if err != nil {
-			if mysqlErr, ok := err.(*mysql.MySQLError); !ok || mysqlErr.Number != 1193 {
-				return db, errors.WithStack(err)
-			}
+			if mysqlErr, ok := err.(*mysql.MySQLError); ok && mysqlErr.Number == 1193 {
+				config.Params["tx_isolation"], config.Params["transaction_isolation"] = config.Params["transaction_isolation"], config.Params["tx_isolation"]
 	
-			config.Params["tx_isolation"], config.Params["transaction_isolation"] = config.Params["transaction_isolation"], config.Params["tx_isolation"]
-	
-			db, err = sql.Open("mysql", config.FormatDSN())
-			if err != nil {
-				return db, errors.WithStack(err)
+				db, err = sql.Open("mysql", config.FormatDSN())
+				if err != nil {
+					return db, errors.WithStack(err)
+				}
 			}
+		}
+
+		if err != nil {
+			return db, errors.WithStack(err)
 		}
 	
 		db.SetConnMaxLifetime(time.Minute * 3)
@@ -187,24 +189,21 @@ func Test_ReplaceDatabaseConnectionErrorIfStatement(t *testing.T) {
 
 	file := codemod.New(sourceCode)
 
-	for _, assignments := range file.FindAssignments(`config.Params`) {
-		if len(assignments) == 0 {
-			continue
+	for _, statements := range file.FindIfStatements() {
+		for _, statement := range statements {
+			if !strings.HasSuffix(codemod.SourceCode(statement.Node.Cond), "Number == 1193") {
+				continue
+			}
+
+			fmt.Printf("\n\naaaaaaa codemod.SourceCode(statement.Node.Cond) %+v\n\n", codemod.SourceCode(statement.Node.Cond))
+
+			// statement.InsertAfter()
 		}
-
-		// assignments[0].InsertAfter(codemod.AstNodeFromSourceCode(`
-		// if config.Params["tx_isolation"] == "" {
-		// 	delete(config.Params, "tx_isolation")
-		// }
-
-		// if config.Params["transaction_isolation"] == "" {
-		// 	delete(config.Params, "transaction_isolation")
-		// }
-		// `))
-
 	}
 
-	t.Fail()
+	fmt.Printf("\n\naaaaaaa file.SourceCode() %+v\n\n", file.SourceCode())
+
+	// t.Fail()
 }
 
 func Test_RewriteErrorsWrapfToFmtErrorf(t *testing.T) {
@@ -1072,4 +1071,115 @@ func main() {
 
 		assert.Equal(t, tt.expected, actual)
 	}
+}
+
+func Test_IfStmt_Remove(t *testing.T) {
+	t.Parallel()
+
+	file := codemod.New([]byte(`
+		package main
+
+		func main() {
+			if 2 == 2 {
+				println("hello")
+			}
+		}
+	`))
+
+	for _, statements := range file.FindIfStatements() {
+		for _, statement := range statements {
+			if codemod.SourceCode(statement.Node.Cond) == "2 == 2" {
+				statement.Remove()
+			}
+		}
+	}
+
+	expected :=
+		`package main
+
+func main() {
+
+}
+`
+
+	actual := string(file.SourceCode())
+
+	assert.Equal(t, expected, actual)
+}
+
+func Test_IfStmt_InsertBefore(t *testing.T) {
+	t.Parallel()
+
+	file := codemod.New([]byte(`
+		package main
+
+		func main() {
+			if 2 == 2 {
+				println("hello")
+			}
+		}
+	`))
+
+	for _, statements := range file.FindIfStatements() {
+		for _, statement := range statements {
+			if codemod.SourceCode(statement.Node.Cond) == "2 == 2" {
+				statement.InsertBefore(codemod.AstNodeFromSourceCode(`println("before if statement")`))
+			}
+		}
+	}
+
+	expected :=
+		`package main
+
+func main() {
+
+	println("before if statement")
+
+	if 2 == 2 {
+		println("hello")
+	}
+}
+`
+
+	actual := string(file.SourceCode())
+
+	assert.Equal(t, expected, actual)
+}
+
+func Test_IfStmt_InsertAfter(t *testing.T) {
+	t.Parallel()
+
+	file := codemod.New([]byte(`
+		package main
+
+		func main() {
+			if 2 == 2 {
+				println("hello")
+			}
+		}
+	`))
+
+	for _, statements := range file.FindIfStatements() {
+		for _, statement := range statements {
+			if codemod.SourceCode(statement.Node.Cond) == "2 == 2" {
+				statement.InsertAfter(codemod.AstNodeFromSourceCode(`println("after if statement")`))
+			}
+		}
+	}
+
+	expected :=
+		`package main
+
+func main() {
+	if 2 == 2 {
+		println("hello")
+	}
+	println("after if statement")
+
+}
+`
+
+	actual := string(file.SourceCode())
+
+	assert.Equal(t, expected, actual)
 }
