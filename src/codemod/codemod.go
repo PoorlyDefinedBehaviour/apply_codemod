@@ -14,6 +14,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+type Project struct {
+	TempFolder string
+}
+
 type SourceFile struct {
 	fileSet *token.FileSet
 	file    *ast.File
@@ -88,7 +92,6 @@ func remove(node NodeWithParent) {
 	}
 
 	block.List = list
-
 }
 
 func SourceCode(node ast.Node) string {
@@ -760,21 +763,20 @@ func (struct_ *Struct) Field(key string) Value {
 }
 
 func (assignment *Assignment) Struct() Struct {
-	composite := assignment.Node.Lhs[0].(*ast.CompositeLit)
+	composite := assignment.Node.Rhs[0].(*ast.CompositeLit)
 	return Struct{literal: composite}
 }
 
 func (assignment *Assignment) Replace(node ast.Stmt) {
 	if funDecl := assignment.Parent.FindUpstreamNode(&ast.FuncDecl{}); funDecl != nil {
-
 		block := funDecl.Node.(*ast.FuncDecl).Body
 
 		for i := 0; i < len(block.List); i++ {
 			assignStmt, ok := block.List[i].(*ast.AssignStmt)
 
 			if ok &&
-				reflect.DeepEqual(assignStmt.Lhs, assignStmt.Lhs) &&
-				reflect.DeepEqual(assignStmt.Rhs, assignStmt.Rhs) {
+				reflect.DeepEqual(assignment.Node.Lhs, assignStmt.Lhs) &&
+				reflect.DeepEqual(assignment.Node.Rhs, assignStmt.Rhs) {
 				block.List[i] = node
 			}
 		}
@@ -816,7 +818,6 @@ func (code *SourceFile) Assignments() map[Scope][]Assignment {
 	})
 
 	return assignments
-
 }
 
 func (code *SourceFile) FindAssignments(target string) map[Scope][]Assignment {
@@ -844,7 +845,6 @@ func (code *SourceFile) FindAssignments(target string) map[Scope][]Assignment {
 						normalizeString(SourceCode(ident)) == normalizeString(target) {
 						out[scope] = append(out[scope], assignment)
 					}
-
 				}
 			}
 		}
