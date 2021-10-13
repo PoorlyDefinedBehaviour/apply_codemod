@@ -3,25 +3,23 @@ package apply
 import (
 	"apply_codemod/src/apply/github"
 	"apply_codemod/src/codemod"
-
+	"fmt"
 	"io/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"fmt"
-
 	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 )
 
-const TEMP_FOLDER = "./codemod_tmp"
+const tempFolder = "./codemod_tmp"
 
 type Codemod struct {
 	Description string
-	Transform   func(*codemod.SourceFile)
+	Transform   interface{}
 }
 
 type Repository struct {
@@ -36,7 +34,7 @@ type Target struct {
 }
 
 func applyCodemodsToRepositoryFiles(codemods []Codemod) error {
-	err := filepath.Walk(TEMP_FOLDER, func(path string, info fs.FileInfo, err error) error {
+	err := filepath.Walk(tempFolder, func(path string, info fs.FileInfo, _ error) error {
 		if info.IsDir() || !strings.HasSuffix(info.Name(), ".go") {
 			return nil
 		}
@@ -49,14 +47,15 @@ func applyCodemodsToRepositoryFiles(codemods []Codemod) error {
 		sourceCode, err := ioutil.ReadAll(file)
 
 		for _, mod := range codemods {
-
 			if err != nil {
 				return errors.WithStack(err)
 			}
 
 			code := codemod.New(sourceCode)
 
-			mod.Transform(code)
+			if f, ok := mod.Transform.(func(*codemod.SourceFile)); ok {
+				f(code)
+			}
 
 			sourceCode = code.SourceCode()
 			if err != nil {
@@ -91,7 +90,6 @@ func applyCodemodsToRepositoryFiles(codemods []Codemod) error {
 
 		return nil
 	})
-
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -105,14 +103,14 @@ func Codemods(targets []Target) error {
 			AccessToken: target.Repo.AccessToken,
 		})
 
-		err := os.RemoveAll(TEMP_FOLDER)
+		err := os.RemoveAll(tempFolder)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
 		repo, err := githubClient.Clone(github.CloneOptions{
 			RepoURL: target.Repo.URL,
-			Folder:  TEMP_FOLDER,
+			Folder:  tempFolder,
 		})
 		if err != nil {
 			return errors.WithStack(err)
@@ -134,6 +132,12 @@ func Codemods(targets []Target) error {
 		})
 		if err != nil {
 			return errors.WithStack(err)
+		}
+
+		for _, mod := range target.Codemods {
+			if f, ok := mod.Transform.(func(codemod.Project)); ok {
+				f(codemod.Project{TempFolder: tempFolder})
+			}
 		}
 
 		err = applyCodemodsToRepositoryFiles(target.Codemods)

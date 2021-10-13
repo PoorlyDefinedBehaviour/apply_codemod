@@ -6,7 +6,6 @@ import (
 	"go/ast"
 	"strings"
 	"testing"
-
 	"github.com/stretchr/testify/assert"
 )
 
@@ -283,8 +282,6 @@ func Connect() (*sql.DB, error) {
 `
 
 	actual := string(file.SourceCode())
-
-	fmt.Printf("\n\naaaaaaa actual %+v\n\n", actual)
 
 	assert.Equal(t, expected, actual)
 }
@@ -1274,4 +1271,8 @@ func main() {
 	actual := string(file.SourceCode())
 
 	assert.Equal(t, expected, actual)
+}
+
+func Test_Repository(t *testing.T) {
+	t.Parallel()
 }
