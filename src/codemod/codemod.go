@@ -825,7 +825,7 @@ func (code *SourceFile) FindAssignments(target string) map[Scope][]Assignment {
 
 	for scope, assignments := range code.Assignments() {
 		for _, assignment := range assignments {
-			if normalizeString(SourceCode(assignment.Node)) == normalizeString(target) {
+			if NormalizeString(SourceCode(assignment.Node)) == NormalizeString(target) {
 				out[scope] = append(out[scope], assignment)
 				continue
 			}
@@ -833,7 +833,7 @@ func (code *SourceFile) FindAssignments(target string) map[Scope][]Assignment {
 			for _, expr := range assignment.Node.Lhs {
 				switch ident := expr.(type) {
 				case *ast.SelectorExpr:
-					if normalizeString(SourceCode(ident)) == normalizeString(target) {
+					if NormalizeString(SourceCode(ident)) == NormalizeString(target) {
 						out[scope] = append(out[scope], assignment)
 					}
 				case *ast.Ident:
@@ -841,8 +841,8 @@ func (code *SourceFile) FindAssignments(target string) map[Scope][]Assignment {
 						out[scope] = append(out[scope], assignment)
 					}
 				case *ast.IndexExpr:
-					if normalizeString(SourceCode(ident.X)) == normalizeString(target) ||
-						normalizeString(SourceCode(ident)) == normalizeString(target) {
+					if NormalizeString(SourceCode(ident.X)) == NormalizeString(target) ||
+						NormalizeString(SourceCode(ident)) == NormalizeString(target) {
 						out[scope] = append(out[scope], assignment)
 					}
 				}
