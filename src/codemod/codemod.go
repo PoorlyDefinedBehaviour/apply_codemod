@@ -208,6 +208,14 @@ type Package struct {
 	Identifier *ast.Ident
 }
 
+func (pkg *Package) Name() string {
+	return pkg.Identifier.Name
+}
+
+func (pkg *Package) SetName(name string) {
+	pkg.Identifier.Name = name
+}
+
 func (code *SourceFile) Package() Package {
 	return Package{Identifier: code.file.Name}
 }

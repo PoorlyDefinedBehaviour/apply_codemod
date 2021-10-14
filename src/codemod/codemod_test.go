@@ -1286,22 +1286,24 @@ func Test_Package(t *testing.T) {
 	func main() {}
 `)
 
-	t.Run("returns struct representing the package", func(t *testing.T) {
-		t.Parallel()
-
-		file := codemod.New(sourceCode)
-
-		assert.Equal(t, "main", file.Package().Identifier.Name)
-	})
-
-	t.Run("renames package", func(t *testing.T) {
+	t.Run("returns package name", func(t *testing.T) {
 		t.Parallel()
 
 		file := codemod.New(sourceCode)
 
 		pkg := file.Package()
 
-		pkg.Identifier.Name = "newpackagename"
+		assert.Equal(t, "main", pkg.Name())
+	})
+
+	t.Run("modifies package name", func(t *testing.T) {
+		t.Parallel()
+
+		file := codemod.New(sourceCode)
+
+		pkg := file.Package()
+
+		pkg.SetName("newpackagename")
 
 		expected :=
 			`package newpackagename
