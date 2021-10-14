@@ -275,10 +275,6 @@ type FunctionCall struct {
 	Node   *ast.CallExpr
 }
 
-type Replacement interface {
-	CallExpr() *ast.CallExpr
-}
-
 func (call *FunctionCall) Replace(node ast.Expr) {
 	funDecl := call.Parent.FindUpstreamNode(&ast.FuncDecl{})
 
