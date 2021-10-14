@@ -168,6 +168,14 @@ func Ast(sourceCode string) ast.Node {
 	return node
 }
 
+func Unquote(s string) string {
+	return s[1 : len(s)-1]
+}
+
+func Quote(s string) string {
+	return fmt.Sprintf(`"%s"`, s)
+}
+
 func (code *SourceFile) SourceCode() []byte {
 	buffer := bytes.Buffer{}
 
@@ -177,14 +185,6 @@ func (code *SourceFile) SourceCode() []byte {
 	}
 
 	return buffer.Bytes()
-}
-
-func Unquote(s string) string {
-	return s[1 : len(s)-1]
-}
-
-func Quote(s string) string {
-	return fmt.Sprintf(`"%s"`, s)
 }
 
 func getCallExprLiteral(cursor *ast.CallExpr) string {
@@ -201,6 +201,14 @@ func getCallExprLiteral(cursor *ast.CallExpr) string {
 	return fmt.Sprintf("%s.%s", identifier.Name, selector.Sel.Name)
 }
 
+type Package struct {
+	Identifier *ast.Ident
+}
+
+func (code *SourceFile) Package() Package {
+	return Package{Identifier: code.file.Name}
+}
+
 type Imports struct {
 	specs *[]ast.Spec
 }
@@ -209,9 +217,9 @@ func (imports *Imports) Paths() []string {
 	out := make([]string, 0, len(*imports.specs))
 
 	for _, spec := range *imports.specs {
-		import_ := spec.(*ast.ImportSpec)
+		importStatement := spec.(*ast.ImportSpec)
 
-		out = append(out, Unquote(import_.Path.Value))
+		out = append(out, Unquote(importStatement.Path.Value))
 	}
 
 	return out

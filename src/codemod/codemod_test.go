@@ -1,12 +1,12 @@
 package codemod_test
 
 import (
-	"apply_codemod/src/codemod"
 	"fmt"
 	"go/ast"
 	"strings"
 	"testing"
 
+	"apply_codemod/src/codemod"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -1274,6 +1274,38 @@ func main() {
 	assert.Equal(t, expected, actual)
 }
 
-func Test_Repository(t *testing.T) {
+func Test_Package(t *testing.T) {
 	t.Parallel()
+
+	sourceCode := []byte(`
+	package main
+
+	func main() {}
+`)
+
+	t.Run("returns struct representing the package", func(t *testing.T) {
+		t.Parallel()
+
+		file := codemod.New(sourceCode)
+
+		assert.Equal(t, "main", file.Package().Identifier.Name)
+	})
+
+	t.Run("renames package", func(t *testing.T) {
+		t.Parallel()
+
+		file := codemod.New(sourceCode)
+
+		pkg := file.Package()
+
+		pkg.Identifier.Name = "newpackagename"
+
+		expected :=
+			`package newpackagename
+
+func main() {}
+`
+
+		assert.Equal(t, expected, string(file.SourceCode()))
+	})
 }
