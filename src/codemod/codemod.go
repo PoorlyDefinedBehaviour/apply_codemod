@@ -204,6 +204,27 @@ func getCallExprLiteral(cursor *ast.CallExpr) string {
 	return fmt.Sprintf("%s.%s", identifier.Name, selector.Sel.Name)
 }
 
+func (code *SourceFile) TraverseAst(f func(NodeWithParent)) {
+	parent := NodeWithParent{
+		Node: code.file,
+	}
+
+	ast.Inspect(
+		code.file,
+		func(node ast.Node) bool {
+			p := parent
+			parent = NodeWithParent{
+				Parent: &p,
+				Node:   node,
+			}
+
+			f(parent)
+
+			return true
+		},
+	)
+}
+
 type Package struct {
 	Identifier *ast.Ident
 }
