@@ -36,7 +36,7 @@ func New(sourceCode []byte) *SourceFile {
 	return &SourceFile{fileSet: fileSet, file: ast}
 }
 
-func normalizeString(s string) string {
+func NormalizeString(s string) string {
 	return strings.ReplaceAll(s, " ", "")
 }
 

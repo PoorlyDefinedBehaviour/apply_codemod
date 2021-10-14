@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"strings"
 	"testing"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -1233,7 +1234,7 @@ func main() {
 
 	actual := string(file.SourceCode())
 
-	assert.Equal(t, expected, actual)
+	assert.Equal(t, codemod.NormalizeString(expected), codemod.NormalizeString(actual))
 }
 
 func Test_IfStmt_InsertAfter(t *testing.T) {
