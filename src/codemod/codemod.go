@@ -275,10 +275,6 @@ type FunctionCall struct {
 	Node   *ast.CallExpr
 }
 
-type Replacement interface {
-	CallExpr() *ast.CallExpr
-}
-
 func (call *FunctionCall) Replace(node ast.Expr) {
 	funDecl := call.Parent.FindUpstreamNode(&ast.FuncDecl{})
 
@@ -334,35 +330,16 @@ func (call *FunctionCall) Remove() {
 	}
 }
 
-// TODO: refactor me to use SourceFile.FunctionCalls()
 func (code *SourceFile) FindCalls(target string) map[Scope][]FunctionCall {
 	out := make(map[Scope][]FunctionCall)
 
-	var parent NodeWithParent
-	var scope Scope
-
-	ast.Inspect(
-		code.file,
-		func(node ast.Node) bool {
-			switch value := node.(type) {
-			case *ast.FuncDecl:
-				scope = Scope{fun: value}
-
-			case *ast.CallExpr:
-				if getCallExprLiteral(value) == target {
-					out[scope] = append(out[scope], FunctionCall{Node: value, Parent: parent})
-				}
+	for scope, calls := range code.FunctionCalls() {
+		for _, call := range calls {
+			if SourceCode(call.Node.Fun) == target {
+				out[scope] = append(out[scope], call)
 			}
-
-			p := parent
-			parent = NodeWithParent{
-				Parent: &p,
-				Node:   node,
-			}
-
-			return true
-		},
-	)
+		}
+	}
 
 	return out
 }
