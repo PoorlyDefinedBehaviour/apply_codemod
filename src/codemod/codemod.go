@@ -275,63 +275,20 @@ type FunctionCall struct {
 	Node   *ast.CallExpr
 }
 
-func (call *FunctionCall) FunctionName() string {
-	return SourceCode(call.Node.Fun)
+func (call *FunctionCall) InsertAfter(node ast.Node) {
+	insertAfter(NodeWithParent{Parent: &call.Parent, Node: call.Parent.Node}, node)
 }
 
-func (call *FunctionCall) Replace(node ast.Expr) {
-	funDecl := call.Parent.FindUpstreamNode(&ast.FuncDecl{})
-
-	block := funDecl.Node.(*ast.FuncDecl).Body
-
-	for i := 0; i < len(block.List); i++ {
-		switch value := block.List[i].(type) {
-		case *ast.ExprStmt:
-			callExpr, ok := value.X.(*ast.CallExpr)
-
-			if ok &&
-				reflect.DeepEqual(callExpr.Fun, call.Node.Fun) &&
-				reflect.DeepEqual(callExpr.Args, call.Node.Args) {
-				block.List[i] = &ast.ExprStmt{X: node}
-			}
-
-		case *ast.ReturnStmt:
-			for i := 0; i < len(value.Results); i++ {
-				callExpr, ok := value.Results[i].(*ast.CallExpr)
-
-				if ok &&
-					reflect.DeepEqual(callExpr.Fun, call.Node.Fun) &&
-					reflect.DeepEqual(callExpr.Args, call.Node.Args) {
-					value.Results[i] = node.(ast.Expr)
-				}
-			}
-		}
-	}
+func (call *FunctionCall) InsertBefore(node ast.Node) {
+	insertBefore(NodeWithParent{Parent: &call.Parent, Node: call.Parent.Node}, node)
 }
 
 func (call *FunctionCall) Remove() {
-	if blockStmt := call.Parent.FindUpstreamNode(&ast.BlockStmt{}); blockStmt != nil {
-		block := blockStmt.Node.(*ast.BlockStmt)
+	remove(NodeWithParent{Parent: &call.Parent, Node: call.Parent.Node})
+}
 
-		list := make([]ast.Stmt, 0)
-
-		for _, stmt := range block.List {
-			exprStmt, ok := stmt.(*ast.ExprStmt)
-
-			if ok {
-				callExpr, ok := exprStmt.X.(*ast.CallExpr)
-				if ok &&
-					reflect.DeepEqual(callExpr.Fun, call.Node.Fun) &&
-					reflect.DeepEqual(callExpr.Args, call.Node.Args) {
-					continue
-				}
-			}
-
-			list = append(list, stmt)
-		}
-
-		block.List = list
-	}
+func (call *FunctionCall) FunctionName() string {
+	return SourceCode(call.Node.Fun)
 }
 
 func (code *SourceFile) FunctionCalls() map[Scope][]FunctionCall {

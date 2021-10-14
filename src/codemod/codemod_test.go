@@ -1,16 +1,19 @@
 package codemod_test
 
 import (
-	"apply_codemod/src/codemod"
 	"fmt"
 	"go/ast"
 	"strings"
 	"testing"
+
+	"apply_codemod/src/codemod"
 	"github.com/stretchr/testify/assert"
 )
 
-func equals(a, b string) bool {
-	return codemod.NormalizeString(a) == codemod.NormalizeString(b)
+func check(t *testing.T, a, b string) {
+	t.Helper()
+
+	assert.Equal(t, codemod.NormalizeString(a), codemod.NormalizeString(b))
 }
 
 func Test_Map(t *testing.T) {
@@ -611,6 +614,112 @@ func Test_FunctionCall(t *testing.T) {
 				assert.Equal(t, tt.expected, calls[0].FunctionName())
 			}
 		}
+	})
+
+	t.Run("inserts node before function call", func(t *testing.T) {
+		file := codemod.New([]byte(`
+			package main
+
+			import "somepackage"
+
+			func main() {
+				somepackage.Foo()
+			}
+		`))
+
+		for _, calls := range file.FunctionCalls() {
+			for _, call := range calls {
+				if call.FunctionName() == "somepackage.Foo" {
+					call.InsertBefore(codemod.Ast(`x := 1`))
+				}
+			}
+		}
+
+		expected :=
+			`package main
+
+import "somepackage"
+
+func main() {
+	x := 1
+	somepackage.Foo()
+}
+`
+
+		check(t, expected, string(file.SourceCode()))
+	})
+
+	t.Run("inserts node after function call", func(t *testing.T) {
+		file := codemod.New([]byte(`
+			package main
+
+			import "somepackage"
+
+			func main() {
+				somepackage.Foo()
+			}
+		`))
+
+		for _, calls := range file.FunctionCalls() {
+			for _, call := range calls {
+				if call.FunctionName() == "somepackage.Foo" {
+					node := codemod.Ast(`
+						type S struct {}
+					`)
+
+					call.InsertAfter(node)
+				}
+			}
+		}
+
+		expected :=
+			`package main
+
+import "somepackage"
+
+func main() {
+	somepackage.Foo()
+	type S struct {}
+}
+`
+
+		actual := string(file.SourceCode())
+
+		check(t, expected, actual)
+	})
+
+	t.Run("removes function call", func(t *testing.T) {
+		file := codemod.New([]byte(`
+			package main
+
+			import "somepackage"
+
+			func main() {
+				somepackage.Foo()
+			}
+		`))
+
+		for _, calls := range file.FunctionCalls() {
+			for _, call := range calls {
+				if call.FunctionName() == "somepackage.Foo" {
+					call.Remove()
+				}
+			}
+		}
+
+		expected :=
+			`package main
+
+import "somepackage"
+
+func main() {
+
+}
+`
+
+		actual := string(file.SourceCode())
+
+		check(t, expected, actual)
 	})
 }
 
@@ -1291,7 +1400,7 @@ func main() {
 
 	actual := string(file.SourceCode())
 
-	assert.True(t, equals(expected, actual))
+	check(t, expected, actual)
 }
 
 func Test_IfStmt_InsertAfter(t *testing.T) {
@@ -1328,7 +1437,7 @@ func main() {
 
 	actual := string(file.SourceCode())
 
-	assert.True(t, equals(expected, actual))
+	check(t, expected, actual)
 }
 
 func Test_Package(t *testing.T) {
