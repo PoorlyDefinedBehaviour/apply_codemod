@@ -6,9 +6,12 @@ import (
 	"go/ast"
 	"strings"
 	"testing"
-
 	"github.com/stretchr/testify/assert"
 )
+
+func equals(a, b string) bool {
+	return codemod.NormalizeString(a) == codemod.NormalizeString(b)
+}
 
 func Test_Map(t *testing.T) {
 	t.Parallel()
@@ -1234,7 +1237,7 @@ func main() {
 
 	actual := string(file.SourceCode())
 
-	assert.Equal(t, codemod.NormalizeString(expected), codemod.NormalizeString(actual))
+	assert.True(t, equals(expected, actual))
 }
 
 func Test_IfStmt_InsertAfter(t *testing.T) {
@@ -1271,9 +1274,41 @@ func main() {
 
 	actual := string(file.SourceCode())
 
-	assert.Equal(t, expected, actual)
+	assert.True(t, equals(expected, actual))
 }
 
-func Test_Repository(t *testing.T) {
+func Test_Package(t *testing.T) {
 	t.Parallel()
+
+	sourceCode := []byte(`
+	package main
+
+	func main() {}
+`)
+
+	t.Run("returns struct representing the package", func(t *testing.T) {
+		t.Parallel()
+
+		file := codemod.New(sourceCode)
+
+		assert.Equal(t, "main", file.Package().Identifier.Name)
+	})
+
+	t.Run("renames package", func(t *testing.T) {
+		t.Parallel()
+
+		file := codemod.New(sourceCode)
+
+		pkg := file.Package()
+
+		pkg.Identifier.Name = "newpackagename"
+
+		expected :=
+			`package newpackagename
+
+func main() {}
+`
+
+		assert.Equal(t, expected, string(file.SourceCode()))
+	})
 }
