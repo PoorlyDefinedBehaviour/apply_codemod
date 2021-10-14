@@ -1,12 +1,11 @@
 package codemod_test
 
 import (
+	"apply_codemod/src/codemod"
 	"fmt"
 	"go/ast"
 	"strings"
 	"testing"
-
-	"apply_codemod/src/codemod"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -1476,4 +1475,24 @@ func main() {}
 
 		assert.Equal(t, expected, string(file.SourceCode()))
 	})
+}
+
+func Test_TraverseAst(t *testing.T) {
+	t.Parallel()
+
+	found := false
+
+	file := codemod.New([]byte(`
+		package bar 
+
+		func z() {}
+	`))
+
+	file.TraverseAst(func(node codemod.NodeWithParent) {
+		if fun, ok := node.Node.(*ast.FuncDecl); ok {
+			found = fun.Name.Name == "z"
+		}
+	})
+
+	assert.True(t, found)
 }
