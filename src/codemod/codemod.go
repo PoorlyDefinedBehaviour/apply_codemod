@@ -190,20 +190,6 @@ func (code *SourceFile) SourceCode() []byte {
 	return buffer.Bytes()
 }
 
-func getCallExprLiteral(cursor *ast.CallExpr) string {
-	selector, ok := cursor.Fun.(*ast.SelectorExpr)
-	if !ok {
-		return ""
-	}
-
-	identifier, ok := selector.X.(*ast.Ident)
-	if !ok {
-		return ""
-	}
-
-	return fmt.Sprintf("%s.%s", identifier.Name, selector.Sel.Name)
-}
-
 func (code *SourceFile) TraverseAst(f func(NodeWithParent)) {
 	parent := NodeWithParent{
 		Node: code.file,
@@ -657,7 +643,7 @@ func (scope *Scope) FindCall(selector string) *FunctionCall {
 		scope.fun,
 		func(node ast.Node) bool {
 			callExpr, ok := node.(*ast.CallExpr)
-			if ok && getCallExprLiteral(callExpr) == selector {
+			if ok && SourceCode(callExpr.Fun) == selector {
 				call = &FunctionCall{Node: callExpr, Parent: parent}
 				return false
 			}
