@@ -311,10 +311,14 @@ func Test_RewriteErrorsWrapfToFmtErrorf(t *testing.T) {
 
 	file := codemod.New(sourceCode)
 
-	scopedCalls := file.FindCalls("errors.Wrapf")
+	scopedCalls := file.FunctionCalls()
 
 	for _, calls := range scopedCalls {
 		for _, call := range calls {
+			if call.FunctionName() != "errors.Wrapf" {
+				continue
+			}
+
 			args := call.Node.Args
 
 			args[0], args[len(args)-1] = args[len(args)-1], args[0]
@@ -557,6 +561,56 @@ func TestSourceFile_FunctionCalls(t *testing.T) {
 				}
 			})
 		})
+	})
+}
+
+func Test_FunctionCall(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns function name", func(t *testing.T) {
+		tests := []struct {
+			code     string
+			expected string
+		}{
+			{
+				code: `
+			package helloworld
+	
+			func f() {}
+	
+			func g() {
+				f()
+			}
+		`,
+				expected: "f",
+			},
+			{
+				code: `
+			package main
+	
+			import "errors"
+	
+			func main() {
+				_ = errors.New("oops")
+			}
+		`,
+				expected: "errors.New",
+			},
+		}
+
+		for _, tt := range tests {
+			file := codemod.New([]byte(tt.code))
+
+			scopedCalls := file.FunctionCalls()
+
+			assert.Equal(t, 1, len(scopedCalls))
+
+			for _, calls := range scopedCalls {
+				assert.Equal(t, 1, len(calls))
+
+				assert.Equal(t, tt.expected, calls[0].FunctionName())
+			}
+		}
 	})
 }
 

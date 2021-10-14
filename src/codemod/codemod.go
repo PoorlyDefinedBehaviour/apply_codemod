@@ -275,6 +275,10 @@ type FunctionCall struct {
 	Node   *ast.CallExpr
 }
 
+func (call *FunctionCall) FunctionName() string {
+	return SourceCode(call.Node.Fun)
+}
+
 func (call *FunctionCall) Replace(node ast.Expr) {
 	funDecl := call.Parent.FindUpstreamNode(&ast.FuncDecl{})
 
@@ -328,20 +332,6 @@ func (call *FunctionCall) Remove() {
 
 		block.List = list
 	}
-}
-
-func (code *SourceFile) FindCalls(target string) map[Scope][]FunctionCall {
-	out := make(map[Scope][]FunctionCall)
-
-	for scope, calls := range code.FunctionCalls() {
-		for _, call := range calls {
-			if SourceCode(call.Node.Fun) == target {
-				out[scope] = append(out[scope], call)
-			}
-		}
-	}
-
-	return out
 }
 
 func (code *SourceFile) FunctionCalls() map[Scope][]FunctionCall {
