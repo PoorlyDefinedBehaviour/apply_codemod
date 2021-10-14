@@ -1,14 +1,17 @@
 package codemod_test
 
 import (
+	"apply_codemod/src/codemod"
 	"fmt"
 	"go/ast"
 	"strings"
 	"testing"
-
-	"apply_codemod/src/codemod"
 	"github.com/stretchr/testify/assert"
 )
+
+func equals(a, b string) bool {
+	return codemod.NormalizeString(a) == codemod.NormalizeString(b)
+}
 
 func Test_Map(t *testing.T) {
 	t.Parallel()
@@ -1234,7 +1237,7 @@ func main() {
 
 	actual := string(file.SourceCode())
 
-	assert.Equal(t, codemod.NormalizeString(expected), codemod.NormalizeString(actual))
+	assert.True(t, equals(expected, actual))
 }
 
 func Test_IfStmt_InsertAfter(t *testing.T) {
@@ -1271,7 +1274,7 @@ func main() {
 
 	actual := string(file.SourceCode())
 
-	assert.Equal(t, expected, actual)
+	assert.True(t, equals(expected, actual))
 }
 
 func Test_Package(t *testing.T) {

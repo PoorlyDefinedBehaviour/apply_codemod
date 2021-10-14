@@ -37,7 +37,10 @@ func New(sourceCode []byte) *SourceFile {
 }
 
 func NormalizeString(s string) string {
-	return strings.ReplaceAll(s, " ", "")
+	s = strings.ReplaceAll(s, " ", "")
+	s = strings.ReplaceAll(s, "\n", "")
+	s = strings.ReplaceAll(s, "\t", "")
+	return s
 }
 
 func insertAfter(node NodeWithParent, newNode ast.Node) {
