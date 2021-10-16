@@ -249,6 +249,16 @@ func (imports *Imports) Paths() []string {
 	return out
 }
 
+func (imports *Imports) Contains(importPath string) bool {
+	for _, path := range imports.Paths() {
+		if path == importPath {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (imports *Imports) Add(importPath string) {
 	for _, path := range imports.Paths() {
 		if path == importPath {
@@ -262,6 +272,20 @@ func (imports *Imports) Add(importPath string) {
 			Value: Quote(importPath),
 		},
 	})
+}
+
+func (imports *Imports) Remove(importPath string) {
+	specs := make([]ast.Spec, 0)
+
+	for _, spec := range *imports.specs {
+		if Unquote(spec.(*ast.ImportSpec).Path.Value) == importPath {
+			continue
+		}
+
+		specs = append(specs, spec)
+	}
+
+	*imports.specs = specs
 }
 
 func (code *SourceFile) Imports() *Imports {
