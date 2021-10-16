@@ -51,7 +51,7 @@ func applyCodemodsToRepositoryFiles(codemods []Codemod) error {
 				return errors.WithStack(err)
 			}
 
-			code := codemod.New(sourceCode)
+			code := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: path})
 
 			if f, ok := mod.Transform.(func(*codemod.SourceFile)); ok {
 				f(code)
