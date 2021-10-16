@@ -1,11 +1,12 @@
 package codemod_test
 
 import (
-	"apply_codemod/src/codemod"
 	"fmt"
 	"go/ast"
 	"strings"
 	"testing"
+
+	"apply_codemod/src/codemod"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -1542,5 +1543,26 @@ func Test_SourceFile_Imports(t *testing.T) {
 		imports.Add("new_import")
 
 		assert.Equal(t, []string{"errors", "package_a", "package_b", "new_import"}, imports.Paths())
+	})
+
+	t.Run("checks if file contains import path", func(t *testing.T) {
+		file := codemod.New(codemod.NewInput{SourceCode: sourceCode})
+
+		imports := file.Imports()
+
+		assert.True(t, imports.Contains("errors"))
+		assert.True(t, imports.Contains("package_a"))
+		assert.True(t, imports.Contains("package_b"))
+		assert.False(t, imports.Contains("package_c"))
+	})
+
+	t.Run("removes import path from file imports", func(t *testing.T) {
+		file := codemod.New(codemod.NewInput{SourceCode: sourceCode})
+
+		imports := file.Imports()
+
+		imports.Remove("package_a")
+
+		assert.Equal(t, []string{"errors", "package_b"}, imports.Paths())
 	})
 }
