@@ -249,17 +249,13 @@ func (imports *Imports) Paths() []string {
 	return out
 }
 
-func (imports *Imports) Some(predicate func(string) bool) bool {
+func (imports *Imports) Add(importPath string) {
 	for _, path := range imports.Paths() {
-		if predicate(path) {
-			return true
+		if path == importPath {
+			return
 		}
 	}
 
-	return false
-}
-
-func (imports *Imports) Add(importPath string) {
 	*imports.specs = append(*imports.specs, &ast.ImportSpec{
 		Path: &ast.BasicLit{
 			Kind:  token.STRING,
@@ -268,7 +264,7 @@ func (imports *Imports) Add(importPath string) {
 	})
 }
 
-func (code *SourceFile) Imports() Imports {
+func (code *SourceFile) Imports() *Imports {
 	var specs *[]ast.Spec
 
 	ast.Inspect(code.file, func(node ast.Node) bool {
@@ -280,7 +276,7 @@ func (code *SourceFile) Imports() Imports {
 		return true
 	})
 
-	return Imports{specs: specs}
+	return &Imports{specs: specs}
 }
 
 type FunctionCall struct {
