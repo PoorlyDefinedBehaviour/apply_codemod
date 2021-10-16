@@ -50,7 +50,7 @@ func Test_Map(t *testing.T) {
 
 			actual := codemod.SourceCode(literal.Expr.Node)
 
-			assert.Equal(t, expected, actual)
+			check(t, expected, actual)
 		})
 
 		t.Run("if key is not in the map, does nothing", func(t *testing.T) {
@@ -62,7 +62,7 @@ func Test_Map(t *testing.T) {
 
 			actual := codemod.SourceCode(literal.Expr.Node)
 
-			assert.Equal(t, expected, actual)
+			check(t, expected, actual)
 		})
 	})
 }
@@ -89,7 +89,7 @@ func Test_IfStatements(t *testing.T) {
 			assert.Equal(t, 1, len(statements))
 
 			for _, statement := range statements {
-				assert.Equal(t, "true", codemod.SourceCode(statement.Node.Cond))
+				check(t, "true", codemod.SourceCode(statement.Node.Cond))
 			}
 		}
 	})
@@ -118,7 +118,7 @@ func Test_IfStatements(t *testing.T) {
 
 			actual := string(file.SourceCode())
 
-			assert.Equal(t, expected, actual)
+			check(t, expected, actual)
 		})
 
 		t.Run("removes only if statement condition", func(t *testing.T) {
@@ -134,7 +134,7 @@ func Test_IfStatements(t *testing.T) {
 
 			actual := string(file.SourceCode())
 
-			assert.Equal(t, expected, actual)
+			check(t, expected, actual)
 		})
 	})
 }
@@ -289,7 +289,7 @@ func Connect() (*sql.DB, error) {
 
 	actual := string(file.SourceCode())
 
-	assert.Equal(t, expected, actual)
+	check(t, expected, actual)
 }
 
 func Test_RewriteErrorsWrapfToFmtErrorf(t *testing.T) {
@@ -1278,7 +1278,7 @@ func main() {
 
 		actual := string(file.SourceCode())
 
-		assert.Equal(t, tt.expected, actual)
+		check(t, tt.expected, actual)
 	}
 }
 
@@ -1327,7 +1327,7 @@ func main() {
 
 		actual := string(file.SourceCode())
 
-		assert.Equal(t, tt.expected, actual)
+		check(t, tt.expected, actual)
 	}
 }
 
@@ -1362,7 +1362,7 @@ func main() {
 
 	actual := string(file.SourceCode())
 
-	assert.Equal(t, expected, actual)
+	check(t, expected, actual)
 }
 
 func Test_IfStmt_InsertBefore(t *testing.T) {
