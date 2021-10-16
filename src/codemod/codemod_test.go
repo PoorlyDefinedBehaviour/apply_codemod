@@ -1,12 +1,11 @@
 package codemod_test
 
 import (
+	"apply_codemod/src/codemod"
 	"fmt"
 	"go/ast"
 	"strings"
 	"testing"
-
-	"apply_codemod/src/codemod"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -336,11 +335,7 @@ func Test_RewriteErrorsWrapfToFmtErrorf(t *testing.T) {
 	}
 
 	if len(scopedCalls) > 0 {
-		imports := file.Imports()
-
-		if !imports.Some(func(path string) bool { return path == "fmt" }) {
-			imports.Add("fmt")
-		}
+		file.Imports().Add("fmt")
 	}
 
 	expected :=
@@ -1512,4 +1507,40 @@ func Test_SourceFile_Path(t *testing.T) {
 	})
 
 	assert.Equal(t, filePath, file.FilePath)
+}
+
+func Test_SourceFile_Imports(t *testing.T) {
+	t.Parallel()
+
+	sourceCode := []byte(`
+	package main 
+
+	import (
+		"errors"
+		"package_a"
+		"package_b"
+	)
+
+	func main() {}
+	`)
+
+	t.Run("user is able to get file imports", func(t *testing.T) {
+		file := codemod.New(codemod.NewInput{SourceCode: sourceCode})
+
+		imports := file.Imports()
+
+		assert.Equal(t, []string{"errors", "package_a", "package_b"}, imports.Paths())
+	})
+
+	t.Run("same import path is not added more than once", func(t *testing.T) {
+		file := codemod.New(codemod.NewInput{SourceCode: sourceCode})
+
+		imports := file.Imports()
+
+		imports.Add("new_import")
+		imports.Add("new_import")
+		imports.Add("new_import")
+
+		assert.Equal(t, []string{"errors", "package_a", "package_b", "new_import"}, imports.Paths())
+	})
 }
