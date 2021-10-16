@@ -19,21 +19,27 @@ type Project struct {
 }
 
 type SourceFile struct {
-	fileSet *token.FileSet
-	file    *ast.File
+	fileSet  *token.FileSet
+	file     *ast.File
+	FilePath string
 }
 
-func New(sourceCode []byte) *SourceFile {
+type NewInput struct {
+	SourceCode []byte
+	FilePath   string
+}
+
+func New(input NewInput) *SourceFile {
 	// a file set represents a set of source files
 	fileSet := token.NewFileSet()
 
 	// parser.ParseComments tells the parser to include comments
-	ast, err := parser.ParseFile(fileSet, "", sourceCode, parser.ParseComments)
+	ast, err := parser.ParseFile(fileSet, "", input.SourceCode, parser.ParseComments)
 	if err != nil {
 		panic(errors.WithStack(err))
 	}
 
-	return &SourceFile{fileSet: fileSet, file: ast}
+	return &SourceFile{fileSet: fileSet, file: ast, FilePath: input.FilePath}
 }
 
 func NormalizeString(s string) string {
@@ -154,7 +160,7 @@ func Ast(sourceCode string) ast.Node {
 		sourceCode = fmt.Sprintf("package %s %s", packageName, sourceCode)
 	}
 
-	sourceFile := New([]byte(sourceCode))
+	sourceFile := New(NewInput{SourceCode: []byte(sourceCode)})
 
 	var node ast.Node
 
