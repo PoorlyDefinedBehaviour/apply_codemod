@@ -1,12 +1,12 @@
 package codemod_test
 
 import (
+	"apply_codemod/src/codemod"
 	"fmt"
 	"go/ast"
+	"go/token"
 	"strings"
 	"testing"
-
-	"apply_codemod/src/codemod"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -1565,4 +1565,93 @@ func Test_SourceFile_Imports(t *testing.T) {
 
 		assert.Equal(t, []string{"errors", "package_b"}, imports.Paths())
 	})
+}
+
+func Test_SourceFile_SwitchStatements(t *testing.T) {
+	t.Parallel()
+
+	sourceCode := []byte(`
+		package p
+
+		func f(x string) {
+			switch x {
+			case "a":
+				println(1)
+			case "b":
+				println(2)
+			default:
+				println(3)
+			}
+		}
+	`)
+
+	file := codemod.New(codemod.NewInput{SourceCode: sourceCode})
+
+	scopedStatements := file.SwitchStatements()
+
+	assert.Equal(t, 1, len(scopedStatements))
+
+	for _, statements := range scopedStatements {
+		for _, switchStmt := range statements {
+			if codemod.SourceCode(switchStmt.Node.Tag) != "x" {
+				continue
+			}
+
+			newSwitchStatementBody := make([]ast.Stmt, 0, len(switchStmt.Node.Body.List))
+
+			for _, caseClause := range switchStmt.Node.Body.List {
+				newSwitchStatementBody = append(newSwitchStatementBody, caseClause)
+
+				if !strings.Contains(codemod.SourceCode(caseClause), `"b"`) {
+					continue
+				}
+
+				newCaseClause := &ast.CaseClause{
+					List: []ast.Expr{
+						&ast.BasicLit{
+							Value: `"c"`,
+						},
+					},
+					Body: []ast.Stmt{
+						&ast.ExprStmt{
+							X: &ast.CallExpr{
+								Fun: &ast.Ident{
+									Name: "println",
+								},
+								Args: []ast.Expr{
+									&ast.BasicLit{
+										Kind:  token.INT,
+										Value: "4",
+									},
+								},
+							},
+						},
+					},
+				}
+
+				newSwitchStatementBody = append(newSwitchStatementBody, newCaseClause)
+			}
+
+			switchStmt.Node.Body.List = newSwitchStatementBody
+		}
+	}
+
+	expected := `
+package p
+
+func f(x string) {
+	switch x {
+	case "a":
+		println(1)
+	case "b":
+		println(2)
+	case "c":
+		println(4)
+	default:
+		println(3)
+	}
+}
+`
+
+	check(t, expected, string(file.SourceCode()))
 }
