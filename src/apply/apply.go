@@ -39,19 +39,23 @@ func applyCodemodsToRepositoryFiles(codemods []Codemod) error {
 			return nil
 		}
 
-		file, err := os.OpenFile(path, os.O_RDWR, 0644)
+		file, err := os.OpenFile(path, os.O_RDWR, 0o644)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
 		sourceCode, err := ioutil.ReadAll(file)
 
+		code := codemod.New(codemod.NewInput{
+			SourceCode:  sourceCode,
+			FilePath:    path,
+			ProjectRoot: tempFolder,
+		})
+
 		for _, mod := range codemods {
 			if err != nil {
 				return errors.WithStack(err)
 			}
-
-			code := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: path})
 
 			if f, ok := mod.Transform.(func(*codemod.SourceFile)); ok {
 				f(code)
@@ -136,7 +140,7 @@ func Codemods(targets []Target) error {
 
 		for _, mod := range target.Codemods {
 			if f, ok := mod.Transform.(func(codemod.Project)); ok {
-				f(codemod.Project{TempFolder: tempFolder})
+				f(codemod.Project{ProjectRoot: tempFolder})
 			}
 		}
 
