@@ -585,6 +585,52 @@ func (code *SourceFile) FindMapLiterals(mapType string) map[Scope][]Map {
 	return out
 }
 
+type SwitchStmt struct {
+	Parent NodeWithParent
+	Node   *ast.SwitchStmt
+}
+
+func (stmt *SwitchStmt) InsertAfter(node ast.Node) {
+	insertAfter(NodeWithParent{Parent: &stmt.Parent, Node: stmt.Node}, node)
+}
+
+func (stmt *SwitchStmt) InsertBefore(node ast.Node) {
+	insertBefore(NodeWithParent{Parent: &stmt.Parent, Node: stmt.Node}, node)
+}
+
+func (stmt *SwitchStmt) Remove() {
+	remove(NodeWithParent{Parent: &stmt.Parent, Node: stmt.Node})
+}
+
+func (code *SourceFile) SwitchStatements() map[Scope][]SwitchStmt {
+	out := make(map[Scope][]SwitchStmt)
+	var parent NodeWithParent
+	var scope Scope
+
+	ast.Inspect(
+		code.file,
+		func(node ast.Node) bool {
+			switch value := node.(type) {
+			case *ast.FuncDecl:
+				scope = Scope{fun: value}
+
+			case *ast.SwitchStmt:
+				out[scope] = append(out[scope], SwitchStmt{Parent: parent, Node: value})
+			}
+
+			p := parent
+			parent = NodeWithParent{
+				Parent: &p,
+				Node:   node,
+			}
+
+			return true
+		},
+	)
+
+	return out
+}
+
 type IfStmt struct {
 	Parent NodeWithParent
 	Node   *ast.IfStmt
