@@ -15,18 +15,20 @@ import (
 )
 
 type Project struct {
-	TempFolder string
+	ProjectRoot string
 }
 
 type SourceFile struct {
-	fileSet  *token.FileSet
-	file     *ast.File
-	FilePath string
+	fileSet     *token.FileSet
+	file        *ast.File
+	ProjectRoot string
+	FilePath    string
 }
 
 type NewInput struct {
-	SourceCode []byte
-	FilePath   string
+	ProjectRoot string
+	SourceCode  []byte
+	FilePath    string
 }
 
 func New(input NewInput) *SourceFile {
@@ -39,7 +41,12 @@ func New(input NewInput) *SourceFile {
 		panic(errors.WithStack(err))
 	}
 
-	return &SourceFile{fileSet: fileSet, file: ast, FilePath: input.FilePath}
+	return &SourceFile{
+		fileSet:     fileSet,
+		file:        ast,
+		FilePath:    input.FilePath,
+		ProjectRoot: input.ProjectRoot,
+	}
 }
 
 func NormalizeString(s string) string {
