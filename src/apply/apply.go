@@ -33,9 +33,14 @@ type Target struct {
 	Codemods []Codemod
 }
 
+func isFileInsideVendorFolder(path string) bool {
+	pathWithoutTempFolder := strings.TrimPrefix(path, tempFolder)
+	return strings.HasPrefix(pathWithoutTempFolder, "/vendor")
+}
+
 func applyCodemodsToRepositoryFiles(codemods []Codemod) error {
 	err := filepath.Walk(tempFolder, func(path string, info fs.FileInfo, _ error) error {
-		if info.IsDir() || !strings.HasSuffix(info.Name(), ".go") {
+		if info.IsDir() || !strings.HasSuffix(info.Name(), ".go") || isFileInsideVendorFolder(path) {
 			return nil
 		}
 
