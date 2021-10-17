@@ -1,8 +1,6 @@
 package apply
 
 import (
-	"apply_codemod/src/apply/github"
-	"apply_codemod/src/codemod"
 	"fmt"
 	"io/fs"
 	"io/ioutil"
@@ -10,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"apply_codemod/src/apply/github"
+	"apply_codemod/src/codemod"
 	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -38,8 +38,19 @@ func isFileInsideVendorFolder(path string) bool {
 	return strings.HasPrefix(pathWithoutTempFolder, "/vendor")
 }
 
-func applyCodemodsToRepositoryFiles(codemods []Codemod) error {
-	err := filepath.Walk(tempFolder, func(path string, info fs.FileInfo, _ error) error {
+func applyCodemodsToRepositoryFiles(codemods []Codemod) (err error) {
+	defer func() {
+		if reason := recover(); reason != nil {
+			panicErr, ok := reason.(error)
+			if !ok {
+				err = errors.Errorf("unexpected panic => %+v", reason)
+			} else {
+				err = panicErr
+			}
+		}
+	}()
+
+	err = filepath.Walk(tempFolder, func(path string, info fs.FileInfo, _ error) error {
 		if info.IsDir() || !strings.HasSuffix(info.Name(), ".go") || isFileInsideVendorFolder(path) {
 			return nil
 		}
