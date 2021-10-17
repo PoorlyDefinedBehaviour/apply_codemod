@@ -37,7 +37,7 @@ func Test_buildDescription(t *testing.T) {
 	assert.Equal(t, expected, actual)
 }
 
-func Test_isVendorFolder(t *testing.T) {
+func Test_isFileInsideVendorFolder(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -55,6 +55,6 @@ func Test_isVendorFolder(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		assert.Equal(t, tt.expected, isVendorFolder(tt.path))
+		assert.Equal(t, tt.expected, isFileInsideVendorFolder(tt.path))
 	}
 }

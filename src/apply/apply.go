@@ -1,6 +1,8 @@
 package apply
 
 import (
+	"apply_codemod/src/apply/github"
+	"apply_codemod/src/codemod"
 	"fmt"
 	"io/fs"
 	"io/ioutil"
@@ -8,8 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"apply_codemod/src/apply/github"
-	"apply_codemod/src/codemod"
 	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -33,14 +33,14 @@ type Target struct {
 	Codemods []Codemod
 }
 
-func isVendorFolder(path string) bool {
+func isFileInsideVendorFolder(path string) bool {
 	pathWithoutTempFolder := strings.TrimPrefix(path, tempFolder)
 	return strings.HasPrefix(pathWithoutTempFolder, "/vendor")
 }
 
 func applyCodemodsToRepositoryFiles(codemods []Codemod) error {
 	err := filepath.Walk(tempFolder, func(path string, info fs.FileInfo, _ error) error {
-		if info.IsDir() || !strings.HasSuffix(info.Name(), ".go") || isVendorFolder(path) {
+		if info.IsDir() || !strings.HasSuffix(info.Name(), ".go") || isFileInsideVendorFolder(path) {
 			return nil
 		}
 
