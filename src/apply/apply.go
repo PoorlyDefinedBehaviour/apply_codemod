@@ -61,12 +61,18 @@ func applyCodemodsToRepositoryFiles(codemods []Codemod) (err error) {
 		}
 
 		sourceCode, err := ioutil.ReadAll(file)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 
-		code := codemod.New(codemod.NewInput{
+		code, err := codemod.New(codemod.NewInput{
 			SourceCode:  sourceCode,
 			FilePath:    path,
 			ProjectRoot: tempFolder,
 		})
+		if err != nil {
+			return errors.WithStack(err)
+		}
 
 		for _, mod := range codemods {
 			if err != nil {
