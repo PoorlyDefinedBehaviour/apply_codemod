@@ -30,7 +30,9 @@ func Test_Map(t *testing.T) {
 `)
 
 	t.Run("Has", func(t *testing.T) {
-		_, literal := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"}).FindMapLiteral("map[string]string")
+		file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
+
+		_, literal := file.FindMapLiteral("map[string]string")
 
 		t.Run("returns true if map contains key", func(t *testing.T) {
 			assert.True(t, literal.Has("transaction_isolation"))
@@ -42,7 +44,9 @@ func Test_Map(t *testing.T) {
 	})
 
 	t.Run("RenameKey", func(t *testing.T) {
-		_, literal := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"}).FindMapLiteral("map[string]string")
+		file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
+
+		_, literal := file.FindMapLiteral("map[string]string")
 
 		t.Run("renames the key", func(t *testing.T) {
 			expected := `map[string]string{"tx_isolation": "'READ-COMMITED'"}`
@@ -55,7 +59,9 @@ func Test_Map(t *testing.T) {
 		})
 
 		t.Run("if key is not in the map, does nothing", func(t *testing.T) {
-			_, literal := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"}).FindMapLiteral("map[string]string")
+			file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
+
+			_, literal := file.FindMapLiteral("map[string]string")
 
 			expected := `map[string]string{"transaction_isolation": "'READ-COMMITED'"}`
 
@@ -74,7 +80,7 @@ func Test_IfStatements(t *testing.T) {
 	t.Run("finds if statement", func(t *testing.T) {
 		t.Parallel()
 
-		file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+		file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 		package main
 
 		func main() {
@@ -107,7 +113,7 @@ func Test_IfStatements(t *testing.T) {
 	`)
 
 		t.Run("removes if statement", func(t *testing.T) {
-			file := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
+			file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
 
 			for _, statements := range file.IfStatements() {
 				for _, statement := range statements {
@@ -123,7 +129,7 @@ func Test_IfStatements(t *testing.T) {
 		})
 
 		t.Run("removes only if statement condition", func(t *testing.T) {
-			file := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
+			file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
 
 			for _, statements := range file.IfStatements() {
 				for _, statement := range statements {
@@ -195,7 +201,7 @@ func Test_ReplaceDatabaseConnectionErrorIfStatement(t *testing.T) {
 	}	
 	`)
 
-	file := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
+	file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
 
 	for _, statements := range file.IfStatements() {
 		for _, statement := range statements {
@@ -312,7 +318,7 @@ func Test_RewriteErrorsWrapfToFmtErrorf(t *testing.T) {
 	}
 	`)
 
-	file := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
+	file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
 
 	scopedCalls := file.FunctionCalls()
 
@@ -396,7 +402,7 @@ func Test_IfContextIsTheLastArgumentItBecomesTheFirst(t *testing.T) {
 	}
 	`)
 
-	file := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
+	file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
 
 	// find function declarations
 	// example:
@@ -499,7 +505,7 @@ func TestSourceFile_FunctionCalls(t *testing.T) {
 
 	t.Run("when there are no function calls", func(t *testing.T) {
 		t.Run("returns the empty map", func(t *testing.T) {
-			file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+			file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 				package main 
 
 				func a() {}
@@ -514,7 +520,7 @@ func TestSourceFile_FunctionCalls(t *testing.T) {
 	t.Run("when there are function calls", func(t *testing.T) {
 		t.Run("returns them", func(t *testing.T) {
 			t.Run("identifier call", func(t *testing.T) {
-				file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+				file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 				package main 
 	
 				func a() {}
@@ -536,7 +542,7 @@ func TestSourceFile_FunctionCalls(t *testing.T) {
 			})
 
 			t.Run("selector call", func(t *testing.T) {
-				file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+				file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 				package main 
 
 				import "errors"
@@ -598,7 +604,7 @@ func Test_FunctionCall(t *testing.T) {
 		}
 
 		for _, tt := range tests {
-			file := codemod.New(codemod.NewInput{SourceCode: []byte(tt.code)})
+			file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(tt.code)})
 
 			scopedCalls := file.FunctionCalls()
 
@@ -613,7 +619,7 @@ func Test_FunctionCall(t *testing.T) {
 	})
 
 	t.Run("inserts node before function call", func(t *testing.T) {
-		file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+		file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 			package main
 
 			import "somepackage"
@@ -646,7 +652,7 @@ func main() {
 	})
 
 	t.Run("inserts node after function call", func(t *testing.T) {
-		file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+		file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 			package main
 
 			import "somepackage"
@@ -685,7 +691,7 @@ func main() {
 	})
 
 	t.Run("removes function call", func(t *testing.T) {
-		file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+		file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 			package main
 
 			import "somepackage"
@@ -724,7 +730,7 @@ func TestSourceFile_Functions(t *testing.T) {
 
 	t.Run("when there are function declarations", func(t *testing.T) {
 		t.Run("returns them", func(t *testing.T) {
-			file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+			file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 			package main 
 
 			func inc(x int) int {
@@ -745,7 +751,7 @@ func TestSourceFile_Functions(t *testing.T) {
 
 	t.Run("when there are no function declarations", func(t *testing.T) {
 		t.Run("returns nothing", func(t *testing.T) {
-			file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+			file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 				package foo
 
 				var SomeConstant int64 = 1
@@ -761,7 +767,7 @@ func Test_TypeDeclarations(t *testing.T) {
 
 	t.Run("when there are no type declarations", func(t *testing.T) {
 		t.Run("returns nothing", func(t *testing.T) {
-			file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+			file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 			package main
 
 			func main(){}
@@ -773,7 +779,7 @@ func Test_TypeDeclarations(t *testing.T) {
 
 	t.Run("when there are type declarations", func(t *testing.T) {
 		t.Run("returns interfaces", func(t *testing.T) {
-			file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+			file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 			package main
 
 			type UserService interface {}
@@ -788,7 +794,7 @@ func Test_TypeDeclarations(t *testing.T) {
 		})
 
 		t.Run("returns structs", func(t *testing.T) {
-			file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+			file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 			package main
 
 			type UserService struct {}
@@ -803,7 +809,7 @@ func Test_TypeDeclarations(t *testing.T) {
 		})
 
 		t.Run("returns type aliases", func(t *testing.T) {
-			file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+			file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 			package main
 
 			type UserID int64
@@ -879,7 +885,9 @@ func TestTypeDeclaration_Methods(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		declarations := codemod.New(codemod.NewInput{SourceCode: []byte(tt.code)}).TypeDeclarations()
+		file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(tt.code)})
+
+		declarations := file.TypeDeclarations()
 
 		assert.NotEmpty(t, declarations)
 
@@ -925,7 +933,9 @@ func TestTypeDeclaration_IsInterface(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		assert.Equal(t, tt.expected, codemod.New(codemod.NewInput{SourceCode: []byte(tt.code)}).TypeDeclarations()[0].IsInterface())
+		file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(tt.code)})
+
+		assert.Equal(t, tt.expected, file.TypeDeclarations()[0].IsInterface())
 	}
 }
 
@@ -963,7 +973,9 @@ func TestTypeDeclaration_IsStruct(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		assert.Equal(t, tt.expected, codemod.New(codemod.NewInput{SourceCode: []byte(tt.code)}).TypeDeclarations()[0].IsStruct())
+		file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(tt.code)})
+
+		assert.Equal(t, tt.expected, file.TypeDeclarations()[0].IsStruct())
 	}
 }
 
@@ -1001,7 +1013,9 @@ func TestTypeDeclaration_IsTypeAlias(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		assert.Equal(t, tt.expected, codemod.New(codemod.NewInput{SourceCode: []byte(tt.code)}).TypeDeclarations()[0].IsTypeAlias())
+		file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(tt.code)})
+
+		assert.Equal(t, tt.expected, file.TypeDeclarations()[0].IsTypeAlias())
 	}
 }
 
@@ -1065,7 +1079,9 @@ func TestMethod_Name(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		declarations := codemod.New(codemod.NewInput{SourceCode: []byte(tt.code)}).TypeDeclarations()
+		file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(tt.code)})
+
+		declarations := file.TypeDeclarations()
 
 		actual := declarations[0].Methods()[0].Name()
 
@@ -1076,7 +1092,7 @@ func TestMethod_Name(t *testing.T) {
 func TestSourceFile_FindAssignments(t *testing.T) {
 	t.Parallel()
 
-	file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+	file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 			package main
 
 			func main() {
@@ -1161,7 +1177,9 @@ func Test_Assignments(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		actual := codemod.New(codemod.NewInput{SourceCode: []byte(tt.code)}).Assignments()
+		file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(tt.code)})
+
+		actual := file.Assignments()
 
 		for _, assignments := range actual {
 			assert.Equal(t, len(tt.expected), len(assignments))
@@ -1259,7 +1277,7 @@ func main() {
 	}
 
 	for _, tt := range tests {
-		file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+		file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 		package main
 
 		func main() {
@@ -1308,7 +1326,7 @@ func main() {
 	}
 
 	for _, tt := range tests {
-		file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+		file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 		package main
 
 		func main() {
@@ -1331,7 +1349,7 @@ func main() {
 func Test_IfStmt_Remove(t *testing.T) {
 	t.Parallel()
 
-	file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+	file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 		package main
 
 		func main() {
@@ -1365,7 +1383,7 @@ func main() {
 func Test_IfStmt_InsertBefore(t *testing.T) {
 	t.Parallel()
 
-	file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+	file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 		package main
 
 		func main() {
@@ -1402,7 +1420,7 @@ func main() {
 func Test_IfStmt_InsertAfter(t *testing.T) {
 	t.Parallel()
 
-	file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+	file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 		package main
 
 		func main() {
@@ -1448,7 +1466,7 @@ func Test_Package(t *testing.T) {
 	t.Run("returns package name", func(t *testing.T) {
 		t.Parallel()
 
-		file := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
+		file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
 
 		pkg := file.Package()
 
@@ -1458,7 +1476,7 @@ func Test_Package(t *testing.T) {
 	t.Run("modifies package name", func(t *testing.T) {
 		t.Parallel()
 
-		file := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
+		file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
 
 		pkg := file.Package()
 
@@ -1479,7 +1497,7 @@ func Test_TraverseAst(t *testing.T) {
 
 	found := false
 
-	file := codemod.New(codemod.NewInput{SourceCode: []byte(`
+	file, _ := codemod.New(codemod.NewInput{SourceCode: []byte(`
 		package bar 
 
 		func z() {}
@@ -1499,7 +1517,7 @@ func Test_SourceFile_Path(t *testing.T) {
 
 	filePath := "src/services/user.go"
 
-	file := codemod.New(codemod.NewInput{
+	file, _ := codemod.New(codemod.NewInput{
 		SourceCode: []byte(`
 		package main 
 		func main() {}
@@ -1526,7 +1544,7 @@ func Test_SourceFile_Imports(t *testing.T) {
 	`)
 
 	t.Run("user is able to get file imports", func(t *testing.T) {
-		file := codemod.New(codemod.NewInput{SourceCode: sourceCode})
+		file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode})
 
 		imports := file.Imports()
 
@@ -1534,7 +1552,7 @@ func Test_SourceFile_Imports(t *testing.T) {
 	})
 
 	t.Run("same import path is not added more than once", func(t *testing.T) {
-		file := codemod.New(codemod.NewInput{SourceCode: sourceCode})
+		file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode})
 
 		imports := file.Imports()
 
@@ -1546,7 +1564,7 @@ func Test_SourceFile_Imports(t *testing.T) {
 	})
 
 	t.Run("checks if file contains import path", func(t *testing.T) {
-		file := codemod.New(codemod.NewInput{SourceCode: sourceCode})
+		file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode})
 
 		imports := file.Imports()
 
@@ -1557,7 +1575,7 @@ func Test_SourceFile_Imports(t *testing.T) {
 	})
 
 	t.Run("removes import path from file imports", func(t *testing.T) {
-		file := codemod.New(codemod.NewInput{SourceCode: sourceCode})
+		file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode})
 
 		imports := file.Imports()
 
@@ -1585,7 +1603,7 @@ func Test_SourceFile_SwitchStatements(t *testing.T) {
 		}
 	`)
 
-	file := codemod.New(codemod.NewInput{SourceCode: sourceCode})
+	file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode})
 
 	scopedStatements := file.SwitchStatements()
 
@@ -1654,4 +1672,33 @@ func f(x string) {
 `
 
 	check(t, expected, string(file.SourceCode()))
+}
+
+func Test_Codemod_New(t *testing.T) {
+	t.Parallel()
+
+	t.Run("when Go file cannot be parsed", func(t *testing.T) {
+		t.Run("returns error", func(t *testing.T) {
+			fileMissingPackage := []byte(`
+				func main() {}
+			`)
+
+			_, err := codemod.New(codemod.NewInput{SourceCode: fileMissingPackage})
+
+			assert.NotNil(t, err)
+		})
+	})
+
+	t.Run("when Go file can be parsed", func(t *testing.T) {
+		t.Run("returns no error", func(t *testing.T) {
+			sourceCode := []byte(`
+			package main
+			func main() {}
+		`)
+
+			_, err := codemod.New(codemod.NewInput{SourceCode: sourceCode})
+
+			assert.Nil(t, err)
+		})
+	})
 }

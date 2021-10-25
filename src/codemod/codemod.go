@@ -31,22 +31,24 @@ type NewInput struct {
 	FilePath    string
 }
 
-func New(input NewInput) *SourceFile {
+func New(input NewInput) (*SourceFile, error) {
 	// a file set represents a set of source files
 	fileSet := token.NewFileSet()
 
 	// parser.ParseComments tells the parser to include comments
 	ast, err := parser.ParseFile(fileSet, "", input.SourceCode, parser.ParseComments)
 	if err != nil {
-		panic(errors.WithStack(err))
+		return nil, errors.WithStack(err)
 	}
 
-	return &SourceFile{
+	sourceFile := &SourceFile{
 		fileSet:     fileSet,
 		file:        ast,
 		FilePath:    input.FilePath,
 		ProjectRoot: input.ProjectRoot,
 	}
+
+	return sourceFile, nil
 }
 
 func NormalizeString(s string) string {
@@ -167,7 +169,10 @@ func Ast(sourceCode string) ast.Node {
 		sourceCode = fmt.Sprintf("package %s %s", packageName, sourceCode)
 	}
 
-	sourceFile := New(NewInput{SourceCode: []byte(sourceCode)})
+	sourceFile, err := New(NewInput{SourceCode: []byte(sourceCode)})
+	if err != nil {
+		panic(err)
+	}
 
 	var node ast.Node
 
