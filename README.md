@@ -185,17 +185,17 @@ func mod(file *codemod.SourceFile)  {
   for _, function := range file.Functions() {
 	  params := function.Params()
 	  // For each function parameter
-      //
+    //
 	  // In this function, for example:
-      //
+    //
 	  // func(x int, y string) {}
-      //
+    //
 	  // we would go through x and then y
 	  for i, param := range params {
 		  // We are looking for the type Context from any package.
-          //
+      //
 		  // We will match these two for example:
-          //
+      //
 		  // context.Context
 		  // othercontext.Context
 		  if !strings.HasSuffix(codemod.SourceCode(param.Type), ".Context") {
@@ -210,13 +210,13 @@ func mod(file *codemod.SourceFile)  {
     for _, call := range calls {
 	    for i, arg := range call.Node.Args {
   		  if expr, ok := arg.(*ast.CallExpr); ok {
-			      // If we are calling context.Background()
+			    // If we are calling context.Background()
 				  fun, ok := expr.Fun.(*ast.SelectorExpr); ok {
   				  if fun.X.(*ast.Ident).Name == "context" &&
                      fun.Sel.Name == "Background" {
-					// Swap context argument with the
-                    // argument that's in the
-                    // first position
+			  		// Swap context argument with the
+            // argument that's in the
+            // first position
 				    call.Node.Args[0], call.Node.Args[i] = call.Node.Args[i], call.Node.Args[0]
 					  }
 				  }
@@ -224,10 +224,10 @@ func mod(file *codemod.SourceFile)  {
 
 			  if expr, ok := arg.(*ast.Ident); ok {
 				  // If we are passing context.Context
-                  // as argument to a function
-                  //
+          // as argument to a function
+          //
 				  // Example:
-                  //
+          //
 				  // foo(userID, ctx)
 				  if expr.Name == "ctx" || expr.Name == "context" {
   					call.Node.Args[0], call.Node.Args[i] = call.Node.Args[i], call.Node.Args[0]
@@ -249,15 +249,15 @@ func mod(file *codemod.SourceFile)  {
 		  params := method.Params()
 
 		  for i, param := range params {
-            // Whenever we find context.Context
-            // in a type declaration,
-            // we move to it position 0.
-            //
-            // The Foo interface bcomes:
-            //
-            // type Foo interface {
-            //  f(ctx context.Context, x int64) error
-            // }
+        // Whenever we find context.Context
+        // in a type declaration,
+        // we move to it position 0.
+        //
+        // The Foo interface bcomes:
+        //
+        // type Foo interface {
+        //  f(ctx context.Context, x int64) error
+        // }
 		    if codemod.SourceCode(param.Type) == "context.Context" {
   				params[0], params[i] = params[i], params[0]
 	  		}
