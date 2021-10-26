@@ -101,13 +101,13 @@ We are still using the expression `2 + 2 + 2` represented by the abstract syntax
 
 ```go
 expr := &BinaryOperation{
-	Left: &BinaryOperation{
-		Left:     &Int{Value: 2},
-		Operator: PLUS,
-		Right:    &Int{Value: 2},
-	},
+  Left: &BinaryOperation{
+    Left:     &Int{Value: 2},
+    Operator: PLUS,
+    Right:    &Int{Value: 2},
+  },
   Operator: PLUS,
-	Right: &Int{Value: 2},
+  Right: &Int{Value: 2},
 }
 ```
 
@@ -146,13 +146,13 @@ if we pass `expr` to `additionToMultiplication`, we will get
 
 ```go
 expr := &BinaryOperation{
-	Left: &BinaryOperation{
-		Left:     &Int{Value: 2},
-		Operator: MUL,
-		Right:    &Int{Value: 2},
-	},
+  Left: &BinaryOperation{
+    Left:     &Int{Value: 2},
+    Operator: MUL,
+    Right:    &Int{Value: 2},
+  },
   Operator: MUL,
-	Right: &Int{Value: 2},
+  Right: &Int{Value: 2},
 }
 ```
 
@@ -173,6 +173,10 @@ go get github.com/poorlydefinedbehaviour/apply_codemod
 # Example
 
 ```go
+import (
+	"github.com/poorlydefinedbehaviour/apply_codemod/src/apply"
+	"github.com/poorlydefinedbehaviour/apply_codemod/src/codemod"
+)
 // Goes from:
 //
 // errors.Wrapf(...)
@@ -220,6 +224,7 @@ func main() {
       },
     },
   }
+
   err := apply.Codemods(codemods)
   if err != nil {
   panic(err)
