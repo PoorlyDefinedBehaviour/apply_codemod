@@ -207,6 +207,10 @@ func transform(file *codemod.SourceFile) {
       }
     }
   }
+
+  if len(scopedCalls) > 0 {
+    file.Imports().Add("fmt")
+  }
 }
 
 func main() {
