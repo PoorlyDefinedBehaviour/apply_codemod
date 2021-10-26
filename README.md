@@ -174,8 +174,9 @@ go get github.com/poorlydefinedbehaviour/apply_codemod
 
 ```go
 import (
-	"github.com/poorlydefinedbehaviour/apply_codemod/src/apply"
-	"github.com/poorlydefinedbehaviour/apply_codemod/src/codemod"
+  "github.com/poorlydefinedbehaviour/apply_codemod/src/apply"
+  "github.com/poorlydefinedbehaviour/apply_codemod/src/codemod"
+  "go/ast"
 )
 // Goes from:
 //
