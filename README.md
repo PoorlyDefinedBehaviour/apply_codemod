@@ -42,7 +42,7 @@ type Int struct {
 	Value int
 }
 
-func (Int) expr() {}
+func (*Int) expr() {}
 
 
 type BinaryOperation struct {
@@ -51,7 +51,7 @@ type BinaryOperation struct {
 	Right    Expr
 }
 
-func (BinaryOperation) expr() {}
+func (*BinaryOperation) expr() {}
 ```
 
 here is an abstract syntax tree representing the expression `2 + 2 + 2`
