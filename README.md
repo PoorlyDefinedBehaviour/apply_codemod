@@ -174,158 +174,56 @@ go get github.com/poorlydefinedbehaviour/apply_codemod
 # Example
 
 ```go
-func mod(file *codemod.SourceFile)  {
-  // Find function declarations like:
-  //
-  // func foo(x int) {}
-  //
-  // type S struct {}
-  //
-  // func(s *S) baz() {}
-  for _, function := range file.Functions() {
-	  params := function.Params()
-    // For each function parameter
-    //
-    // In this function, for example:
-    //
-    // func(x int, y string) {}
-    //
-    // we would go through x and then y
-	  for i, param := range params {
-		  // We are looking for the type Context from any package.
-      //
-		  // We will match these two for example:
-      //
-		  // context.Context
-		  // othercontext.Context
-		  if !strings.HasSuffix(codemod.SourceCode(param.Type), ".Context") {
-			  continue
-		  }
-		  // swap context with first position argument
-		  params[0], params[i] = params[i], params[0]
-	  }
-  }
+// Goes from:
+//
+// errors.Wrapf(...)
+//
+// to
+//
+// fmt.Errorf(...)
 
-  for _, calls := range file.FunctionCalls() {
-    for _, call := range calls {
-	    for i, arg := range call.Node.Args {
-  		  if expr, ok := arg.(*ast.CallExpr); ok {
-			    // If we are calling context.Background()
-				  fun, ok := expr.Fun.(*ast.SelectorExpr); ok {
-  				  if fun.X.(*ast.Ident).Name == "context" &&
-                     fun.Sel.Name == "Background" {
-			  		// Swap context argument with the
-            // argument that's in the
-            // first position
-				    call.Node.Args[0], call.Node.Args[i] = call.Node.Args[i], call.Node.Args[0]
-					  }
-				  }
-			  }
+func transform(file *codemod.SourceFile) {
+  scopedCalls := file.FunctionCalls()
 
-			  if expr, ok := arg.(*ast.Ident); ok {
-				  // If we are passing context.Context
-          // as argument to a function
-          //
-				  // Example:
-          //
-				  // foo(userID, ctx)
-				  if expr.Name == "ctx" || expr.Name == "context" {
-  					call.Node.Args[0], call.Node.Args[i] = call.Node.Args[i], call.Node.Args[0]
-				  }
-			  }
-		  }
-	  }
-  }
+	for _, calls := range scopedCalls {
+		for _, call := range calls {
+			if call.FunctionName() != "errors.Wrapf" {
+				continue
+			}
 
-  // Looking for type declarations that contain context.Context
-  //
-  // Example:
-  //
-  // type Foo interface {
-  //   f(x int64, ctx context.Context) error
-  // }
-  for _, typeDecl := range file.TypeDeclarations() {
-  	for _, method := range typeDecl.Methods() {
-		  params := method.Params()
+			args := call.Node.Args
 
-		  for i, param := range params {
-        // Whenever we find context.Context
-        // in a type declaration,
-        // we move to it position 0.
-        //
-        // The Foo interface bcomes:
-        //
-        // type Foo interface {
-        //  f(ctx context.Context, x int64) error
-        // }
-		    if codemod.SourceCode(param.Type) == "context.Context" {
-  				params[0], params[i] = params[i], params[0]
-	  		}
-  		}
-  	}
-  }
-}
+			args[0], args[len(args)-1] = args[len(args)-1], args[0]
 
-sourceCode := []byte(`
-package main
+			args[0].(*ast.BasicLit).Value = codemod.Quote(codemod.Unquote(args[0].(*ast.BasicLit).Value) + ": %w")
 
-import "context"
-
-type UserService interface {
-  DoSomething(int64, context.Context) error
-}
-
-func buz(userID int64, ctx context.Context) error {
-  return nil
-}
-
-func baz(userID int64, context context.Context) error {
-  return buz(userID, context)
-}
-
-func foo(userID int64, ctx context.Context) error {
-  err := baz(userID, ctx)
-  if err != nil {
-  	return err
-  }
-  return nil
+			call.Node.Fun = &ast.SelectorExpr{
+				X:   &ast.Ident{Name: "fmt"},
+				Sel: &ast.Ident{Name: "Errorf"},
+			}
+		}
+	}
 }
 
 func main() {
-  _ = foo(1, context.Background())
+  codemods := []apply.Target{
+		{
+			Repo: apply.Repository{
+				AccessToken: *accessToken,
+				URL:         "https://github.com/PoorlyDefinedBehaviour/apply_codemod_test",
+				Branch:      "main",
+			},
+			Codemods: []apply.Codemod{
+				{
+					Description: "replaces errors.Wrapf with fmt.Errorf",
+					Transform: transform,
+				}
+			},
+		},
+	}
+	err := apply.Codemods(codemods)
+	if err != nil {
+		panic(err)
+	}
 }
-`)
-
-file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
-
-mod(file)
-
-fmt.Println(file.SourceCode())
->> package main
->>
->> import "context"
->>
->> type UserService interface {
->>  DoSomething(context.Context, int64) error
->> }
->>
->> func buz(ctx context.Context, userID int64) error {
->> 	return nil
->> }
->>
->> func baz(context context.Context, userID int64) error {
->> 	return buz(context, userID)
->> }
->>
->> func foo(ctx context.Context, userID int64) error {
->> 	err := baz(ctx, userID)
->>  if err != nil {
->> 	  return err
->>  }
->>  return nil
->> }
->>
->> func main() {
->>  _ = foo(context.Background(), 1)
->> }
 ```
