@@ -184,13 +184,13 @@ func mod(file *codemod.SourceFile)  {
   // func(s *S) baz() {}
   for _, function := range file.Functions() {
 	  params := function.Params()
-	  // For each function parameter
+    // For each function parameter
     //
-	  // In this function, for example:
+    // In this function, for example:
     //
-	  // func(x int, y string) {}
+    // func(x int, y string) {}
     //
-	  // we would go through x and then y
+    // we would go through x and then y
 	  for i, param := range params {
 		  // We are looking for the type Context from any package.
       //
