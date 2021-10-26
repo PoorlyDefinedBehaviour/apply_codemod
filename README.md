@@ -171,95 +171,86 @@ The idea here is that you can do the same thing for the Go abstract syntax tree.
 go get github.com/poorlydefinedbehaviour/apply_codemod
 ```
 
-# Examples
+# Example
 
 ```go
+func mod(file *codemod.SourceFile)  {
+// find function declarations
+// example:
+// func foo(x int) {}
+for _, function := range file.Functions() {
+	params := function.Params()
+	// for each function parameter
+	// example:
+	// func(x int, y string) {}
+	// we would go through x and then y
+	for i, param := range params {
+		// we are looking for the type Context from any package.
+		// we will match these two for example:
+		// context.Context
+		// othercontext.Context
+		if !strings.HasSuffix(codemod.SourceCode(param.Type), ".Context") {
+			continue
+		}
+		// swap context with first position argument
+		params[0], params[i] = params[i], params[0]
+	}
+}
 
-package main
-
-import (
-	"github.com/poorlydefinedbehaviour/apply_codemod/src/apply"
-	"github.com/poorlydefinedbehaviour/apply_codemod/src/codemod"
-	"flag"
-	"go/ast"
-)
-/*
-Goes from:
-
-errors.Wrapf(...)
-
-to:
-
-fmt.Errorf(...)
-*/
-func rewriteErrorsWrapfToFmtErrorf(file *codemod.SourceFile) {
-	scopedCalls := file.FunctionCalls()
-
-	for _, calls := range scopedCalls {
-		for _, call := range calls {
-			if call.FunctionName() != "errors.Wrapf" {
-				continue
+for _, calls := range file.FunctionCalls() {
+  for _, call := range calls {
+	  for i, arg := range call.Node.Args {
+		  if expr, ok := arg.(*ast.CallExpr); ok {
+			    // if we are calling context.Background()
+				fun, ok := expr.Fun.(*ast.SelectorExpr); ok {
+				  if fun.X.(*ast.Ident).Name == "context" && fun.Sel.Name == "Background" {
+						// swap context argument with the first position argument
+						call.Node.Args[0], call.Node.Args[i] = call.Node.Args[i], call.Node.Args[0]
+					}
+				}
 			}
 
-			args := call.Node.Args
-
-			args[0], args[len(args)-1] = args[len(args)-1], args[0]
-
-			args[0].(*ast.BasicLit).Value = codemod.Quote(codemod.Unquote(args[0].(*ast.BasicLit).Value) + ": %w")
-
-			call.Node.Fun = &ast.SelectorExpr{
-				X:   &ast.Ident{Name: "fmt"},
-				Sel: &ast.Ident{Name: "Errorf"},
+			if expr, ok := arg.(*ast.Ident); ok {
+				// if we are passing context.Context as argument to a function
+				// example:
+				// foo(userID, ctx)
+				if expr.Name == "ctx" || expr.Name == "context" {
+					call.Node.Args[0], call.Node.Args[i] = call.Node.Args[i], call.Node.Args[0]
+				}
 			}
 		}
 	}
+}
 
-	if len(scopedCalls) > 0 {
-		file.Imports().Add("fmt")
+// Looking for type declarations that contain context.Context
+//
+// Example:
+//
+// type Foo interface {
+//   f(x int64, ctx context.Context) error
+// }
+for _, typeDecl := range file.TypeDeclarations() {
+	for _, method := range typeDecl.Methods() {
+		params := method.Params()
+
+		for i, param := range params {
+      // Whenever we find context.Context in a type declaration
+      // move to it position 0.
+      //
+      // The foo interface would become:
+      //
+      // type Foo interface {
+      //  f(ctx context.Context, x int64) error
+      // }
+			if codemod.SourceCode(param.Type) == "context.Context" {
+				params[0], params[i] = params[i], params[0]
+			}
+		}
 	}
 }
 
-func main() {
- 	sourceCode := []byte(`
-	package main
-
-	import "errors"
-
-	var errSomething = errors.New("oops")
-
-	func foo() error {
-		return errors.Wrapf(errSomething, "some context")
-	}
-
-	func main() {}
-	`)
-
-	file, err := codemod.New(codemod.NewInput{SourceCode: sourceCode})
-  if err != nil {
-    panic(err)
-  }
-
-  rewriteErrorsWrapfToFmtErrorf(file)
-
-  fmt.Println(file.SourceCode())
->> package main
->>
->> import (
->>  "errors"
->>  "fmt"
->> )
->>
->> var errSomething = errors.New("oops")
->>
->> func foo() error {
->>  return fmt.Errorf("some context: %w", errSomething)
->> }
->>
->> func main() {}
 }
-```
 
-```go
 sourceCode := []byte(`
 package main
 
@@ -292,80 +283,7 @@ func main() {
 
 file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode, FilePath: "path"})
 
-// find function declarations
-// example:
-// func foo(x int) {}
-for _, function := range file.Functions() {
-	params := function.Params()
-	// for each function parameter
-	// example:
-	// func(x int, y string) {}
-	// we would go through x and then y
-	for i, param := range params {
-		// we are looking for the type Context from any package.
-		// we will match these two for example:
-		// context.Context
-		// othercontext.Context
-		if !strings.HasSuffix(codemod.SourceCode(param.Type), ".Context") {
-			continue
-		}
-		// swap context with first position argument
-		params[0], params[i] = params[i], params[0]
-	}
-}
-
-for _, calls := range file.FunctionCalls() {
-  for _, call := range calls {
-	  for i, arg := range call.Node.Args {
-		  if expr, ok := arg.(*ast.CallExpr); ok {
-			  // if we are calling context.Background()
-				fun, ok := expr.Fun.(*ast.SelectorExpr); ok {
-				  if fun.X.(*ast.Ident).Name == "context" && fun.Sel.Name == "Background" {
-						// swap context argument with the first position argument
-						call.Node.Args[0], call.Node.Args[i] = call.Node.Args[i], call.Node.Args[0]
-					}
-				}
-			}
-
-			if expr, ok := arg.(*ast.Ident); ok {
-				// if we are passing context.Context as argument to a function
-				// example:
-				// foo(userID, ctx)
-				if expr.Name == "ctx" || expr.Name == "context" {
-					call.Node.Args[0], call.Node.Args[i] = call.Node.Args[i], call.Node.Args[0]
-				}
-			}
-		}
-	}
-}
-
-
-// Looking for type declarations that contain context.Context
-//
-// Example:
-//
-// type Foo interface {
-//   f(x int64, ctx context.Context) error
-// }
-for _, typeDecl := range file.TypeDeclarations() {
-	for _, method := range typeDecl.Methods() {
-		params := method.Params()
-
-		for i, param := range params {
-      // Whenever we find context.Context in a type declaration
-      // move to it position 0.
-      //
-      // The foo interface would become:
-      //
-      // type Foo interface {
-      //  f(ctx context.Context, x int64) error
-      // }
-			if codemod.SourceCode(param.Type) == "context.Context" {
-				params[0], params[i] = params[i], params[0]
-			}
-		}
-	}
-}
+mod(file)
 
 fmt.Println(file.SourceCode())
 >> package main
