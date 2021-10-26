@@ -28,27 +28,26 @@ as a `struct` with one operator and two operands
 type Operator rune
 
 const (
-	PLUS  Operator = '+'
-	MINUS Operator = '-'
-	MUL   Operator = '*'
-	DIV   Operator = '/'
+  PLUS  Operator = '+'
+  MINUS Operator = '-'
+  MUL   Operator = '*'
+  DIV   Operator = '/'
 )
 
 type Expr interface {
-	expr()
+  expr()
 }
 
 type Int struct {
-	Value int
+  Value int
 }
 
 func (*Int) expr() {}
 
-
 type BinaryOperation struct {
-	Left     Expr
-	Operator Operator
-	Right    Expr
+  Left     Expr
+  Operator Operator
+  Right    Expr
 }
 
 func (*BinaryOperation) expr() {}
@@ -58,13 +57,13 @@ here is an abstract syntax tree representing the expression `2 + 2 + 2`
 
 ```go
 expr := &BinaryOperation{
-	Left: &BinaryOperation{
-		Left:     &Int{Value: 2},
-		Operator: PLUS,
-		Right:    &Int{Value: 2},
-	},
+  Left: &BinaryOperation{
+    Left:     &Int{Value: 2},
+    Operator: PLUS,
+    Right:    &Int{Value: 2},
+  },
   Operator: PLUS,
-	Right: &Int{Value: 2},
+  Right: &Int{Value: 2},
 }
 ```
 
@@ -73,23 +72,23 @@ traverse the `struct` that represents the source code and interpret it
 
 ```go
 func eval(expr Expr) int {
-	switch expr := expr.(type) {
-	case *BinaryOperation:
-		switch expr.Operator {
-		case PLUS:
-			return eval(expr.Left) + eval(expr.Right)
-		case MINUS:
-			return eval(expr.Left) - eval(expr.Right)
-		case MUL:
-			return eval(expr.Left) * eval(expr.Right)
-		case DIV:
-			return eval(expr.Left) + eval(expr.Right)
-		}
-	case *Int:
-		return expr.Value
-	}
+  switch expr := expr.(type) {
+  case *BinaryOperation:
+    switch expr.Operator {
+    case PLUS:
+      return eval(expr.Left) + eval(expr.Right)
+    case MINUS:
+      return eval(expr.Left) - eval(expr.Right)
+    case MUL:
+      return eval(expr.Left) * eval(expr.Right)
+    case DIV:
+      return eval(expr.Left) + eval(expr.Right)
+    }
+  case *Int:
+    return expr.Value
+  }
 
-	panic(fmt.Sprintf("unknown expr %T", expr))
+  panic(fmt.Sprintf("unknown expr %T", expr))
 }
 
 
@@ -181,49 +180,49 @@ go get github.com/poorlydefinedbehaviour/apply_codemod
 // to
 //
 // fmt.Errorf(...)
-
 func transform(file *codemod.SourceFile) {
   scopedCalls := file.FunctionCalls()
 
-	for _, calls := range scopedCalls {
-		for _, call := range calls {
-			if call.FunctionName() != "errors.Wrapf" {
-				continue
-			}
+  for _, calls := range scopedCalls {
+    for _, call := range calls {
+      if call.FunctionName() != "errors.Wrapf" {
+        continue
+      }
 
-			args := call.Node.Args
+      args := call.Node.Args
 
-			args[0], args[len(args)-1] = args[len(args)-1], args[0]
+      args[0], args[len(args)-1] = args[len(args)-1], args[0]
 
-			args[0].(*ast.BasicLit).Value = codemod.Quote(codemod.Unquote(args[0].(*ast.BasicLit).Value) + ": %w")
+      args[0].(*ast.BasicLit).Value =
+        codemod.Quote(codemod.Unquote(args[0].(*ast.BasicLit).Value) + ": %w")
 
-			call.Node.Fun = &ast.SelectorExpr{
-				X:   &ast.Ident{Name: "fmt"},
-				Sel: &ast.Ident{Name: "Errorf"},
-			}
-		}
-	}
+      call.Node.Fun = &ast.SelectorExpr{
+        X:   &ast.Ident{Name: "fmt"},
+        Sel: &ast.Ident{Name: "Errorf"},
+      }
+    }
+  }
 }
 
 func main() {
   codemods := []apply.Target{
-		{
-			Repo: apply.Repository{
-				AccessToken: *accessToken,
-				URL:         "https://github.com/PoorlyDefinedBehaviour/apply_codemod_test",
-				Branch:      "main",
-			},
-			Codemods: []apply.Codemod{
-				{
-					Description: "replaces errors.Wrapf with fmt.Errorf",
-					Transform: transform,
-				}
-			},
-		},
-	}
-	err := apply.Codemods(codemods)
-	if err != nil {
-		panic(err)
-	}
+    {
+      Repo: apply.Repository{
+        AccessToken: "github_access_token",
+        URL:         "https://github.com/PoorlyDefinedBehaviour/apply_codemod_test",
+        Branch:      "main",
+      },
+      Codemods: []apply.Codemod{
+        {
+          Description: "replaces errors.Wrapf with fmt.Errorf",
+          Transform: transform,
+        }
+      },
+    },
+  }
+  err := apply.Codemods(codemods)
+  if err != nil {
+  panic(err)
+  }
 }
 ```
