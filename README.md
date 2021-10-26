@@ -69,7 +69,7 @@ expr := &BinaryOperation{
 ```
 
 and if we wanted to produce a value out of the expression we could
-travese the `struct` that represents the source code and interpret it
+traverse the `struct` that represents the source code and interpret it
 
 ```go
 func eval(expr Expr) int {
@@ -136,7 +136,7 @@ func additionToMultiplication(expr Expr) {
   }
 
   // Since the expression is represented by a tree
-  // we travese left and right because
+  // we traverse left and right because
   // we may find another binary operation.
   additionToMultiplication(op.Left)
   additionToMultiplication(op.Right)
