@@ -232,7 +232,7 @@ func main() {
 
   err := apply.Codemods(codemods)
   if err != nil {
-  panic(err)
+    panic(err)
   }
 }
 ```
