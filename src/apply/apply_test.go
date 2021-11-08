@@ -2,12 +2,13 @@ package apply
 
 import (
 	"apply_codemod/src/codemod"
-	"errors"
+
 	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -122,4 +123,20 @@ func Test_applyCodemodsToRepositoryFiles(t *testing.T) {
 			assert.Nil(t, applyCodemodsToRepositoryFiles(mods))
 		})
 	})
+}
+
+func TestLocally(t *testing.T) {
+	t.Parallel()
+
+	t.Run("when directory where codemods should be applied is not informed", func(t *testing.T) {
+		t.Run("returns error", func(t *testing.T) {
+			err := Locally([]Codemod{})
+
+			assert.True(t, errors.Is(err, ErrDirIsRequired))
+		})
+	})
+
+	// TODO:
+	// Test that codemods are actually applied to temp folder.
+	// Create a folder for text features.
 }

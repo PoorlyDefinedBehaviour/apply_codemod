@@ -1,6 +1,7 @@
 package apply
 
 import (
+	"flag"
 	"fmt"
 	"io/fs"
 	"io/ioutil"
@@ -10,8 +11,10 @@ import (
 
 	"apply_codemod/src/apply/github"
 	"apply_codemod/src/codemod"
+
 	"github.com/fatih/color"
 	"github.com/google/uuid"
+	"github.com/otiai10/copy"
 	"github.com/pkg/errors"
 )
 
@@ -118,6 +121,43 @@ func applyCodemodsToRepositoryFiles(codemods []Codemod) (err error) {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	return nil
+}
+
+var ErrDirIsRequired = errors.New("directory where codemods should be applied is required")
+
+func Locally(mods []Codemod) error {
+	targetDirectoryPath := flag.String("dir", "", "directory where codemods should be applied")
+
+	flag.Parse()
+
+	if *targetDirectoryPath == "" {
+		flag.Usage()
+		return errors.WithStack(ErrDirIsRequired)
+	}
+
+	err := os.RemoveAll(tempFolder)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	err = copy.Copy(*targetDirectoryPath, tempFolder)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	for _, mod := range mods {
+
+		if f, ok := mod.Transform.(func(codemod.Project)); ok {
+			f(codemod.Project{ProjectRoot: tempFolder})
+		}
+
+		err = applyCodemodsToRepositoryFiles(mods)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 	}
 
 	return nil
