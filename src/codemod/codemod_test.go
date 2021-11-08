@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"strings"
 	"testing"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -1701,4 +1702,97 @@ func Test_Codemod_New(t *testing.T) {
 			assert.Nil(t, err)
 		})
 	})
+}
+
+func Test_Example_UpdateNewRelicDataStoreCalls(t *testing.T) {
+	t.Parallel()
+
+	sourceCode := []byte(`
+package repositories
+
+import (
+	"context"
+
+	newrelic "github.com/newrelic/go-agent"
+)
+
+func Create(ctx context.Context) {
+	s := newrelic.DatastoreSegment{
+		Product:            newrelic.DatastoreMySQL,
+		Collection:         "users",
+		Operation:          "INSERT",
+		ParameterizedQuery: "INSERT INTO users (name, age) VALUES ($1, $2)",
+		QueryParameters: map[string]interface{}{
+			"name": "Dracula",
+			"age":  439,
+		},
+		Host:         "mysql-server-1",
+		PortPathOrID: "3306",
+		DatabaseName: "my_database",
+	}
+
+	s = startSegment(ctx, s)
+	// ... make the datastore call
+	s.End()
+}
+`)
+
+	file, _ := codemod.New(codemod.NewInput{SourceCode: sourceCode})
+
+	for scope, assignments := range file.FindAssignments("s") {
+		s := assignments[0].Struct()
+
+		args := []ast.Expr{
+			s.Field("Collection").Expr,
+			s.Field("Operation").Expr,
+			s.Field("ParameterizedQuery").Expr,
+		}
+
+		newCall := &ast.DeferStmt{
+			Call: &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X: &ast.CallExpr{
+						Fun:  &ast.Ident{Name: "StartDBSegment"},
+						Args: args,
+					},
+					Sel: &ast.Ident{
+						Name: "End",
+					},
+				},
+				Args: nil, // End args,
+			},
+		}
+
+		// remove s := newrelic.DatastoreSegment{...}
+		assignments[0].Remove()
+
+		// remove s = startSegment(...) with defer StartDBSegment(...).End()
+		assignments[1].Replace(newCall)
+
+		// remove s.End() call
+		scope.FindCall("s.End").Remove()
+	}
+
+	expected :=
+		`package repositories
+
+import (
+	"context"
+
+	newrelic "github.com/newrelic/go-agent"
+)
+
+func Create(ctx context.Context) {
+	defer StartDBSegment("users",
+		"INSERT",
+		"INSERT INTO users (name, age) VALUES ($1, $2)").End()
+
+	// ... make the datastore call
+
+}
+`
+
+	actual := string(file.SourceCode())
+
+	check(t, expected, actual)
 }
