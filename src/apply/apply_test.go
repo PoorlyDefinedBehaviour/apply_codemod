@@ -64,10 +64,10 @@ func Test_isFileInsideVendorFolder(t *testing.T) {
 	}
 }
 
-func Test_applyCodemodsToRepositoryFiles(t *testing.T) {
+func Test_applyCodemodsToDirectory(t *testing.T) {
 	t.Parallel()
 
-	testFolder := fmt.Sprintf("%s/Test_applyCodemodsToRepositoryFiles", tempFolder)
+	testFolder := fmt.Sprintf("%s/Test_applyCodemodsToDirectory", tempFolder)
 
 	assert.Nil(t, os.MkdirAll(testFolder, os.ModePerm))
 
@@ -92,7 +92,7 @@ func Test_applyCodemodsToRepositoryFiles(t *testing.T) {
 				},
 			}
 
-			err := applyCodemodsToRepositoryFiles(mods)
+			err := applyCodemodsToDirectory(tempFolder, mods)
 
 			assert.Equal(t, panicErr, err)
 		})
@@ -105,7 +105,7 @@ func Test_applyCodemodsToRepositoryFiles(t *testing.T) {
 				},
 			}
 
-			err := applyCodemodsToRepositoryFiles(mods)
+			err := applyCodemodsToDirectory(tempFolder, mods)
 
 			assert.Equal(t, "unexpected panic => a", err.Error())
 		})
@@ -120,7 +120,7 @@ func Test_applyCodemodsToRepositoryFiles(t *testing.T) {
 				},
 			}
 
-			assert.Nil(t, applyCodemodsToRepositoryFiles(mods))
+			assert.Nil(t, applyCodemodsToDirectory(tempFolder, mods))
 		})
 	})
 }

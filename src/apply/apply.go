@@ -14,7 +14,6 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/google/uuid"
-	"github.com/otiai10/copy"
 	"github.com/pkg/errors"
 )
 
@@ -41,7 +40,7 @@ func isFileInsideVendorFolder(path string) bool {
 	return strings.HasPrefix(pathWithoutTempFolder, "/vendor")
 }
 
-func applyCodemodsToRepositoryFiles(codemods []Codemod) (err error) {
+func applyCodemodsToDirectory(directory string, codemods []Codemod) (err error) {
 	defer func() {
 		if reason := recover(); reason != nil {
 			panicErr, ok := reason.(error)
@@ -53,7 +52,7 @@ func applyCodemodsToRepositoryFiles(codemods []Codemod) (err error) {
 		}
 	}()
 
-	err = filepath.Walk(tempFolder, func(path string, info fs.FileInfo, _ error) error {
+	err = filepath.Walk(directory, func(path string, info fs.FileInfo, _ error) error {
 		if info.IsDir() || !strings.HasSuffix(info.Name(), ".go") || isFileInsideVendorFolder(path) {
 			return nil
 		}
@@ -138,23 +137,12 @@ func Locally(mods []Codemod) error {
 		return errors.WithStack(ErrDirIsRequired)
 	}
 
-	err := os.RemoveAll(tempFolder)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	err = copy.Copy(*targetDirectoryPath, tempFolder)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
 	for _, mod := range mods {
-
 		if f, ok := mod.Transform.(func(codemod.Project)); ok {
 			f(codemod.Project{ProjectRoot: tempFolder})
 		}
 
-		err = applyCodemodsToRepositoryFiles(mods)
+		err := applyCodemodsToDirectory(*targetDirectoryPath, mods)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -206,7 +194,7 @@ func Codemods(targets []Target) error {
 			}
 		}
 
-		err = applyCodemodsToRepositoryFiles(target.Codemods)
+		err = applyCodemodsToDirectory(tempFolder, target.Codemods)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -218,11 +206,11 @@ func Codemods(targets []Target) error {
 			return errors.WithStack(err)
 		}
 
-		FilesAffected, err := repo.FilesAffected()
+		filesAffected, err := repo.FilesAffected()
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		if len(FilesAffected) == 0 {
+		if len(filesAffected) == 0 {
 			fmt.Printf("%s %s\n", color.RedString("[NOT CHANGED]"), target.Repo.URL)
 			return nil
 		}
