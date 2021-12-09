@@ -265,6 +265,7 @@ go run main.go -dir=absolute/path/to/repository/in/my/computer
 // main.go
 
 package main
+
 func rewriteErrorsWrapfToFmtErrorf(code *codemod.SourceFile) {
   ...
 }
