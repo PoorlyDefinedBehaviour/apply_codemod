@@ -1,10 +1,9 @@
 package examples_test
 
 import (
+	"apply_codemod/src/codemod"
 	"fmt"
 	"os"
-
-	"apply_codemod/src/codemod"
 	"github.com/pkg/errors"
 )
 
@@ -33,6 +32,5 @@ func modifyRepository(code codemod.Project) {
 	_, err = file.Write([]byte(newFileContents))
 	if err != nil {
 		fmt.Printf("couldn't modify CODEOWNERS file => %+v", errors.WithStack(err))
-		return
 	}
 }
