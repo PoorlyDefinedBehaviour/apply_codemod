@@ -174,6 +174,8 @@ go get github.com/poorlydefinedbehaviour/apply_codemod
 
 # Example
 
+## Applying codemods to remote repositories
+
 ```go
 import (
   "github.com/poorlydefinedbehaviour/apply_codemod/src/apply"
@@ -218,8 +220,21 @@ func main() {
     {
       Repo: apply.Repository{
         AccessToken: "github_access_token",
-        URL:         "https://github.com/PoorlyDefinedBehaviour/apply_codemod_test",
+        URL:         "https://github.com/PoorlyDefinedBehaviour/repo_1",
         Branch:      "main",
+      },
+      Codemods: []apply.Codemod{
+        {
+          Description: "replaces errors.Wrapf with fmt.Errorf",
+          Transform: transform,
+        }
+      },
+    },
+    {
+      Repo: apply.Repository{
+        AccessToken: "github_access_token",
+        URL:         "https://github.com/PoorlyDefinedBehaviour/repo_2",
+        Branch:      "development",
       },
       Codemods: []apply.Codemod{
         {
@@ -234,5 +249,59 @@ func main() {
   if err != nil {
     panic(err)
   }
+}
+```
+
+## Applying codemods to local directory
+
+We can apply codemods to local directories by calling `apply.Locally` in the code
+and running it with the `-dir` flag:
+
+```terminal
+go run main.go -dir=absolute/path/to/repository/in/my/computer
+```
+
+```go
+// main.go
+
+package main
+
+func rewriteErrorsWrapfToFmtErrorf(code *codemod.SourceFile) {
+  ...
+}
+
+func updateNewrelicDatastoreCalls(code *codemod.SourceFile) {
+  ...
+}
+
+func updateTransactionIsolationParameter(code *codemod.SourceFile) {
+  ...
+}
+
+func addsCodeOwnersFile(code *codemod.Project) {
+  ...
+}
+
+func main() {
+  apply.Locally(
+		[]apply.Codemod{
+			{
+				Description: "replaces errors.Wrapf with fmt.Errorf",
+				Transform:   rewriteErrorsWrapfToFmtErrorf,
+			},
+			{
+				Description: "updates new relic DatastoreSegment calls to the new version",
+				Transform:   updateNewrelicDatastoreCalls,
+			},
+			{
+				Description: "passes tx_isolation instead of transaction_isolation to MySQL",
+				Transform:   updateTransactionIsolationParameter,
+			},
+      {
+				Description: "adds CODEOWNERS file",
+				Transform: addsCodeOwnersFile,
+			}
+	  },
+  )
 }
 ```
