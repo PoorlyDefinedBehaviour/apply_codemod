@@ -1,5 +1,7 @@
 Inspired by [Facebook's codemod](https://github.com/facebookarchive/codemod) and [Facebook's jscodeshift](https://github.com/facebook/jscodeshift)
 
+# Check out the [examples](https://github.com/PoorlyDefinedBehaviour/apply_codemod/tree/main/examples)
+
 # What is a codemod?
 
 According to Facebook, codemod is a tool/library to assist you with large-scale codebase refactors that can be partially automated but still require human oversight and occasional intervention.
