@@ -212,7 +212,7 @@ func Codemods(targets []Target) error {
 		}
 		if len(filesAffected) == 0 {
 			fmt.Printf("%s %s\n", color.RedString("[NOT CHANGED]"), target.Repo.URL)
-			return nil
+			continue
 		}
 
 		err = repo.Commit(
