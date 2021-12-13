@@ -11,7 +11,6 @@ import (
 
 	"apply_codemod/src/apply/github"
 	"apply_codemod/src/codemod"
-
 	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -70,7 +69,7 @@ func applyCodemodsToDirectory(directory string, codemods []Codemod) (err error) 
 		code, err := codemod.New(codemod.NewInput{
 			SourceCode:  sourceCode,
 			FilePath:    path,
-			ProjectRoot: tempFolder,
+			ProjectRoot: directory,
 		})
 		if err != nil {
 			return errors.WithStack(err)
@@ -139,7 +138,7 @@ func Locally(mods []Codemod) error {
 
 	for _, mod := range mods {
 		if f, ok := mod.Transform.(func(codemod.Project)); ok {
-			f(codemod.Project{ProjectRoot: tempFolder})
+			f(codemod.Project{ProjectRoot: *targetDirectoryPath})
 		}
 
 		err := applyCodemodsToDirectory(*targetDirectoryPath, mods)
