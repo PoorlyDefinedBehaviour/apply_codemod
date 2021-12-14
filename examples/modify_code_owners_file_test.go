@@ -1,9 +1,10 @@
-package examples_test
+package main
 
 import (
 	"apply_codemod/src/codemod"
 	"fmt"
 	"os"
+
 	"github.com/pkg/errors"
 )
 

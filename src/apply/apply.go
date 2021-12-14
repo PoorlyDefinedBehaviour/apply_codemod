@@ -25,14 +25,14 @@ type Codemod struct {
 }
 
 type Repository struct {
-	AccessToken string
-	URL         string
-	Branch      string
+	URL    string
+	Branch string
 }
 
 type Target struct {
-	Repo     Repository
-	Codemods []Codemod
+	AccessToken  string
+	Repositories []Repository
+	Codemods     []Codemod
 }
 
 func applyCodemodsToDirectory(directory string, codemods []Codemod) (err error) {
@@ -47,8 +47,8 @@ func applyCodemodsToDirectory(directory string, codemods []Codemod) (err error) 
 		}
 	}()
 
-	err = filepath.Walk(directory, func(path string, info fs.FileInfo, _ error) error {
-		if strings.Contains(path, "vendor") || info.IsDir() || !strings.HasSuffix(info.Name(), ".go") {
+	err = filepath.Walk("./", func(path string, info fs.FileInfo, _ error) error {
+		if strings.Contains(path, "vendor") || info == nil || info.IsDir() || !strings.HasSuffix(info.Name(), ".go") {
 			return nil
 		}
 
@@ -132,6 +132,11 @@ func Locally(mods []Codemod) error {
 		return errors.WithStack(ErrDirIsRequired)
 	}
 
+	originalDir, err := os.Getwd()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	if err := os.Chdir(*targetDirectoryPath); err != nil {
 		return errors.WithStack(err)
 	}
@@ -142,42 +147,40 @@ func Locally(mods []Codemod) error {
 		}
 	}
 
-	err := applyCodemodsToDirectory(*targetDirectoryPath, mods)
-	if err != nil {
+	if err := applyCodemodsToDirectory(*targetDirectoryPath, mods); err != nil {
+		return errors.WithStack(err)
+	}
+
+	if err := os.Chdir(originalDir); err != nil {
 		return errors.WithStack(err)
 	}
 
 	return nil
 }
 
-func Codemods(targets []Target) error {
-	for _, target := range targets {
+func Codemods(target Target) error {
+	for _, repository := range target.Repositories {
 		githubClient := github.New(github.Config{
-			AccessToken: target.Repo.AccessToken,
+			AccessToken: target.AccessToken,
 		})
 
-		err := os.RemoveAll(tempFolder)
-		if err != nil {
+		if err := os.RemoveAll(tempFolder); err != nil {
 			return errors.WithStack(err)
 		}
 
 		repo, err := githubClient.Clone(github.CloneOptions{
-			RepoURL: target.Repo.URL,
+			RepoURL: repository.URL,
 			Folder:  tempFolder,
 		})
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
-		if err := os.Chdir(tempFolder); err != nil {
-			return errors.WithStack(err)
-		}
-
 		err = repo.Checkout(github.CheckoutOptions{
-			Branch: target.Repo.Branch,
+			Branch: repository.Branch,
 		})
 		if err != nil {
-			return errors.WithStack(err)
+			return errors.Wrapf(err, "git checkout %s failed in %s", repository.Branch, repository.URL)
 		}
 
 		codemodBranch := uuid.New().String()
@@ -191,17 +194,27 @@ func Codemods(targets []Target) error {
 			return errors.WithStack(err)
 		}
 
+		originalDir, err := os.Getwd()
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		if err := os.Chdir(tempFolder); err != nil {
+			return errors.WithStack(err)
+		}
+
 		for _, mod := range target.Codemods {
 			if f, ok := mod.Transform.(func(codemod.Project)); ok {
 				f(codemod.Project{ProjectRoot: tempFolder})
-				if err := os.Chdir(tempFolder); err != nil {
-					return errors.WithStack(err)
-				}
 			}
 		}
 
 		err = applyCodemodsToDirectory(tempFolder, target.Codemods)
 		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		if err := os.Chdir(originalDir); err != nil {
 			return errors.WithStack(err)
 		}
 
@@ -217,8 +230,7 @@ func Codemods(targets []Target) error {
 			return errors.WithStack(err)
 		}
 		if len(filesAffected) == 0 {
-			fmt.Printf("%s %s\n", color.RedString("[NOT CHANGED]"), target.Repo.URL)
-			continue
+			fmt.Printf("%s %s\n", color.RedString("[NOT CHANGED]"), repository.URL)
 		}
 
 		err = repo.Commit(
@@ -235,10 +247,10 @@ func Codemods(targets []Target) error {
 		}
 
 		pullRequest, err := githubClient.PullRequest(github.PullRequestOptions{
-			RepoURL:     target.Repo.URL,
+			RepoURL:     repository.URL,
 			Title:       "[AUTO GENERATED] applied codemods",
 			FromBranch:  codemodBranch,
-			ToBranch:    target.Repo.Branch,
+			ToBranch:    repository.Branch,
 			Description: buildDescription(&target),
 		})
 		if err != nil {

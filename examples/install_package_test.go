@@ -1,8 +1,9 @@
-package examples_test
+package main
 
 import (
 	"apply_codemod/src/apply"
 	"apply_codemod/src/codemod"
+	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -29,10 +30,8 @@ func replaceImports(from, to string) func(*codemod.SourceFile) {
 		for _, path := range code.Imports().Paths() {
 			if strings.HasSuffix(path, from) {
 				fmt.Printf("replacing import %s with %s\n", path, to)
-
 				code.Imports().Remove(path)
 				code.Imports().Add(to)
-
 				return
 			}
 		}
@@ -51,24 +50,72 @@ func deletePkgFolder(target string) func(codemod.Project) {
 	}
 }
 
-func InstallPackageExample() {
-	codemods :=
-		[]apply.Codemod{
-			{
-				Description: "installs github.com/IQ-tech/go-errors",
-				Transform:   installPkg("github.com/IQ-tech/go-errors"),
-			},
-			{
-				Description: "imports github.com/IQ-tech/go-errors instead of {module}/infra/errors",
-				Transform:   replaceImports("infra/errors", "github.com/IQ-tech/go-errors"),
-			},
-			{
-				Description: "delete {module}infra/errors folder",
-				Transform:   deletePkgFolder("infra/errors"),
-			},
-		}
+// Example usage
+// go run main.go \
+// -token=github_token \
+// -repo=https://github.com/PoorlyDefinedBehaviour/apply_codemod_test \
+// -branch=main \
+// -pkg=github.com/IQ-tech/go-errors \
+// -path=infra/errors
+func main() {
+	token := flag.String("token", "", "github access token")
+	pkg := flag.String("pkg", "", "package that will be installed")
+	path := flag.String("path", "", "path of the package that's being replaced")
+	repo := flag.String("repo", "", "target repo")
+	branch := flag.String("branch", "", "target branch")
 
-	if err := apply.Locally(codemods); err != nil {
+	flag.Parse()
+
+	if *token == "" {
+		flag.Usage()
+		panic("github token is required")
+	}
+
+	if *pkg == "" {
+		flag.Usage()
+		panic("the package that will be installed is required")
+	}
+
+	if *path == "" {
+		flag.Usage()
+		panic("the package that's being replaced by the new package is required. example: infra/errors")
+	}
+
+	if *repo == "" {
+		flag.Usage()
+		panic("the target repo is required")
+	}
+
+	if *branch == "" {
+		flag.Usage()
+		panic("the repo branch is required")
+	}
+
+	target := apply.Target{
+		AccessToken: *token,
+		Repositories: []apply.Repository{
+			{
+				URL:    *repo,
+				Branch: *branch,
+			},
+		},
+		Codemods: []apply.Codemod{
+			{
+				Description: fmt.Sprintf("installs %s", *pkg),
+				Transform:   installPkg(*pkg),
+			},
+			{
+				Description: fmt.Sprintf("imports %s instead of %s", *pkg, *path),
+				Transform:   replaceImports(*path, *pkg),
+			},
+			{
+				Description: fmt.Sprintf("delete %s", *path),
+				Transform:   deletePkgFolder(*path),
+			},
+		},
+	}
+
+	if err := apply.Codemods(target); err != nil {
 		panic(err)
 	}
 }
