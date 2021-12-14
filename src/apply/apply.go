@@ -11,6 +11,7 @@ import (
 
 	"apply_codemod/src/apply/github"
 	"apply_codemod/src/codemod"
+
 	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -34,11 +35,6 @@ type Target struct {
 	Codemods []Codemod
 }
 
-func isFileInsideVendorFolder(path string) bool {
-	pathWithoutTempFolder := strings.TrimPrefix(path, tempFolder)
-	return strings.HasPrefix(pathWithoutTempFolder, "/vendor")
-}
-
 func applyCodemodsToDirectory(directory string, codemods []Codemod) (err error) {
 	defer func() {
 		if reason := recover(); reason != nil {
@@ -52,7 +48,7 @@ func applyCodemodsToDirectory(directory string, codemods []Codemod) (err error) 
 	}()
 
 	err = filepath.Walk(directory, func(path string, info fs.FileInfo, _ error) error {
-		if info.IsDir() || !strings.HasSuffix(info.Name(), ".go") || isFileInsideVendorFolder(path) {
+		if strings.Contains(path, "vendor") || info.IsDir() || !strings.HasSuffix(info.Name(), ".go") {
 			return nil
 		}
 
@@ -140,11 +136,11 @@ func Locally(mods []Codemod) error {
 		if f, ok := mod.Transform.(func(codemod.Project)); ok {
 			f(codemod.Project{ProjectRoot: *targetDirectoryPath})
 		}
+	}
 
-		err := applyCodemodsToDirectory(*targetDirectoryPath, mods)
-		if err != nil {
-			return errors.WithStack(err)
-		}
+	err := applyCodemodsToDirectory(*targetDirectoryPath, mods)
+	if err != nil {
+		return errors.WithStack(err)
 	}
 
 	return nil
@@ -190,6 +186,9 @@ func Codemods(targets []Target) error {
 		for _, mod := range target.Codemods {
 			if f, ok := mod.Transform.(func(codemod.Project)); ok {
 				f(codemod.Project{ProjectRoot: tempFolder})
+				if err := os.Chdir(tempFolder); err != nil {
+					return errors.WithStack(err)
+				}
 			}
 		}
 
