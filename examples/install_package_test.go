@@ -13,14 +13,6 @@ import (
 
 func installPkg(pkgName string) func(codemod.Project) {
 	return func(code codemod.Project) {
-		fmt.Printf("cd %s\n", code.ProjectRoot)
-
-		if err := os.Chdir(code.ProjectRoot); err != nil {
-			fmt.Printf("unable to cd into %s", code.ProjectRoot)
-			fmt.Println(err)
-			return
-		}
-
 		fmt.Printf("installing %s\n", pkgName)
 		err := exec.Command("go", "get", pkgName).Run()
 		if err != nil {

@@ -132,6 +132,10 @@ func Locally(mods []Codemod) error {
 		return errors.WithStack(ErrDirIsRequired)
 	}
 
+	if err := os.Chdir(*targetDirectoryPath); err != nil {
+		return errors.WithStack(err)
+	}
+
 	for _, mod := range mods {
 		if f, ok := mod.Transform.(func(codemod.Project)); ok {
 			f(codemod.Project{ProjectRoot: *targetDirectoryPath})
@@ -162,6 +166,10 @@ func Codemods(targets []Target) error {
 			Folder:  tempFolder,
 		})
 		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		if err := os.Chdir(tempFolder); err != nil {
 			return errors.WithStack(err)
 		}
 
