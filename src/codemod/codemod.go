@@ -250,6 +250,10 @@ type Imports struct {
 }
 
 func (imports *Imports) Paths() []string {
+	if imports.specs == nil {
+		return make([]string, 0)
+	}
+
 	out := make([]string, 0, len(*imports.specs))
 
 	for _, spec := range *imports.specs {
