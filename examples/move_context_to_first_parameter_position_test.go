@@ -1,10 +1,11 @@
-package examples_test
+package main_test
 
 import (
 	"apply_codemod/src/codemod"
 	"go/ast"
 	"strings"
 	"testing"
+
 	"github.com/stretchr/testify/assert"
 )
 
