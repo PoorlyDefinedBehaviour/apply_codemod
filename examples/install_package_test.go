@@ -3,6 +3,7 @@ package main
 import (
 	"apply_codemod/src/apply"
 	"apply_codemod/src/codemod"
+	"context"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -40,7 +41,9 @@ func replaceImports(from, to string) func(*codemod.SourceFile) {
 
 func deletePkgFolder(target string) func(codemod.Project) {
 	return func(code codemod.Project) {
-		filepath.Walk(code.ProjectRoot, func(path string, _ fs.FileInfo, _ error) error {
+		projectRoot, _ := os.Getwd()
+
+		filepath.Walk(projectRoot, func(path string, _ fs.FileInfo, _ error) error {
 			if strings.HasSuffix(path, target) {
 				os.RemoveAll(path)
 			}
@@ -91,31 +94,20 @@ func main() {
 		panic("the repo branch is required")
 	}
 
-	target := apply.Target{
-		AccessToken: *token,
-		Repositories: []apply.Repository{
-			{
-				URL:    *repo,
-				Branch: *branch,
-			},
+	if err := apply.Apply(context.Background(), []apply.Codemod{
+		{
+			Description: fmt.Sprintf("installs %s", *pkg),
+			Transform:   installPkg(*pkg),
 		},
-		Codemods: []apply.Codemod{
-			{
-				Description: fmt.Sprintf("installs %s", *pkg),
-				Transform:   installPkg(*pkg),
-			},
-			{
-				Description: fmt.Sprintf("imports %s instead of %s", *pkg, *path),
-				Transform:   replaceImports(*path, *pkg),
-			},
-			{
-				Description: fmt.Sprintf("delete %s", *path),
-				Transform:   deletePkgFolder(*path),
-			},
+		{
+			Description: fmt.Sprintf("imports %s instead of %s", *pkg, *path),
+			Transform:   replaceImports(*path, *pkg),
 		},
-	}
-
-	if err := apply.Codemods(target); err != nil {
+		{
+			Description: fmt.Sprintf("delete %s", *path),
+			Transform:   deletePkgFolder(*path),
+		},
+	}); err != nil {
 		panic(err)
 	}
 }

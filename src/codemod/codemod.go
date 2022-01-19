@@ -15,20 +15,17 @@ import (
 )
 
 type Project struct {
-	ProjectRoot string
 }
 
 type SourceFile struct {
-	fileSet     *token.FileSet
-	file        *ast.File
-	ProjectRoot string
-	FilePath    string
+	fileSet  *token.FileSet
+	file     *ast.File
+	FilePath string
 }
 
 type NewInput struct {
-	ProjectRoot string
-	SourceCode  []byte
-	FilePath    string
+	SourceCode []byte
+	FilePath   string
 }
 
 func New(input NewInput) (*SourceFile, error) {
@@ -42,10 +39,9 @@ func New(input NewInput) (*SourceFile, error) {
 	}
 
 	sourceFile := &SourceFile{
-		fileSet:     fileSet,
-		file:        ast,
-		FilePath:    input.FilePath,
-		ProjectRoot: input.ProjectRoot,
+		fileSet:  fileSet,
+		file:     ast,
+		FilePath: input.FilePath,
 	}
 
 	return sourceFile, nil

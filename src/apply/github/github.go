@@ -184,6 +184,34 @@ func (github *T) PullRequest(options PullRequestOptions) (*googlegithub.PullRequ
 	return pullRequest, nil
 }
 
+func (github *T) GetRepositories(ctx context.Context, user string) ([]*googlegithub.Repository, error) {
+	repos, _, err := github.client.Repositories.List(ctx, user, &googlegithub.RepositoryListOptions{
+		ListOptions: googlegithub.ListOptions{
+			PerPage: 1000,
+		},
+	},
+	)
+	if err != nil {
+		return repos, errors.WithStack(err)
+	}
+
+	return repos, nil
+}
+
+func (github *T) GetOrgRepositories(ctx context.Context, org string) ([]*googlegithub.Repository, error) {
+	repos, _, err := github.client.Repositories.ListByOrg(ctx, org, &googlegithub.RepositoryListByOrgOptions{
+		ListOptions: googlegithub.ListOptions{
+			PerPage: 1000,
+		},
+	},
+	)
+	if err != nil {
+		return repos, errors.WithStack(err)
+	}
+
+	return repos, nil
+}
+
 type RepoInfo struct {
 	Owner string
 	Name  string

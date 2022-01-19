@@ -10,14 +10,20 @@ import (
 
 // Creates or updates .github/CODEOWNERS
 func modifyRepository(code codemod.Project) {
-	err := os.MkdirAll(fmt.Sprintf("%s/.github", code.ProjectRoot), os.ModePerm)
+	projectRoot, err := os.Getwd()
+	if err != nil {
+		fmt.Printf("couldn't find project root => %+v", err)
+		return
+	}
+
+	err = os.MkdirAll(fmt.Sprintf("%s/.github", projectRoot), os.ModePerm)
 	if err != nil {
 		fmt.Printf("couldn't create .github folder => %+v", errors.WithStack(err))
 		return
 	}
 
 	file, err := os.OpenFile(
-		fmt.Sprintf("%s/.github/CODEOWNERS", code.ProjectRoot),
+		fmt.Sprintf("%s/.github/CODEOWNERS", projectRoot),
 		os.O_RDWR|os.O_CREATE|os.O_TRUNC,
 		os.ModePerm,
 	)
