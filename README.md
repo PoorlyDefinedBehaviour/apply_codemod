@@ -1,5 +1,24 @@
 Inspired by [Facebook's codemod](https://github.com/facebookarchive/codemod) and [Facebook's jscodeshift](https://github.com/facebook/jscodeshift)
 
+# Command line options
+
+```terminal
+Usage:
+  apply_codemod [OPTIONS]
+
+Application Options:
+      --github_token=      github access token
+      --github_user=       github user that owns the target repositories
+      --github_org=        github organization that owns the target repositories
+      --repo_name_matches= regex used to match repositories. codemods will be applied to any repository that matches the regex
+      --local_dir=         directory on your machine that codemods should be applied to
+      --repos=             list of repositories to apply codemod to. should be a list of repository_url:branch
+      --replace=           replaces whatever matches the regex on left to whatever is on the right
+
+Help Options:
+  -h, --help               Show this help message
+```
+
 # Check out the [examples](https://github.com/PoorlyDefinedBehaviour/apply_codemod/tree/main/examples)
 
 # What is a codemod?

@@ -2,7 +2,6 @@ package apply
 
 import (
 	"apply_codemod/src/codemod"
-
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -12,21 +11,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_buildDescription(t *testing.T) {
+func Test_buildPullRequestDescription(t *testing.T) {
 	t.Parallel()
 
-	target := Target{
-		Repositories: []Repository{
-			{
-				URL:    "https://github.com/PoorlyDefinedBehaviour/apply_codemod_test",
-				Branch: "main",
-			},
-		},
-		Codemods: []Codemod{
-			{Description: "a"},
-			{Description: "b"},
-			{Description: "c"},
-		},
+	codemods := []Codemod{
+		{Description: "a"},
+		{Description: "b"},
+		{Description: "c"},
 	}
 
 	expected :=
@@ -38,7 +29,20 @@ func Test_buildDescription(t *testing.T) {
 
 λ c`
 
-	actual := buildDescription(&target)
+	os.Args = []string{
+		"directory",
+		"--github_token=token",
+		"--repo_name_matches=apply_codemod_test",
+		"--local_dir=repository/dir/in/my/computer",
+	}
+
+	applier, err := New()
+
+	applier.codemods = codemods
+
+	assert.NoError(t, err)
+
+	actual := applier.buildPullRequestDescription()
 
 	assert.Equal(t, expected, actual)
 }
@@ -71,7 +75,7 @@ func Test_applyCodemodsToDirectory(t *testing.T) {
 				},
 			}
 
-			err := applyCodemodsToDirectory(tempFolder, mods)
+			err := applyCodemodsToDirectory(tempFolder, map[string]string{}, mods)
 
 			assert.Equal(t, panicErr, err)
 		})
@@ -84,7 +88,7 @@ func Test_applyCodemodsToDirectory(t *testing.T) {
 				},
 			}
 
-			err := applyCodemodsToDirectory(tempFolder, mods)
+			err := applyCodemodsToDirectory(tempFolder, map[string]string{}, mods)
 
 			assert.Equal(t, "unexpected panic => a", err.Error())
 		})
@@ -99,7 +103,7 @@ func Test_applyCodemodsToDirectory(t *testing.T) {
 				},
 			}
 
-			assert.Nil(t, applyCodemodsToDirectory(tempFolder, mods))
+			assert.Nil(t, applyCodemodsToDirectory(tempFolder, map[string]string{}, mods))
 		})
 	})
 }
@@ -107,15 +111,58 @@ func Test_applyCodemodsToDirectory(t *testing.T) {
 func TestLocally(t *testing.T) {
 	t.Parallel()
 
-	t.Run("when directory where codemods should be applied is not informed", func(t *testing.T) {
-		t.Run("returns error", func(t *testing.T) {
-			err := Locally([]Codemod{})
+	// t.Run("when directory where codemods should be applied is not informed", func(t *testing.T) {
+	// 	t.Run("returns error", func(t *testing.T) {
+	// 		err := Locally([]Codemod{})
 
-			assert.True(t, errors.Is(err, ErrDirIsRequired))
-		})
-	})
+	// 		assert.True(t, errors.Is(err, ErrDirIsRequired))
+	// 	})
+	// })
 
 	// TODO:
 	// Test that codemods are actually applied to temp folder.
 	// Create a folder for text features.
+}
+
+func Test_New(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the profile or a list of repositories must be informed", func(t *testing.T) {
+		os.Args = []string{"directory", "--github_token=token"}
+
+		_, err := New()
+
+		assert.True(t, errors.Is(err, ErrArgumentIsRequired))
+		assert.Equal(
+			t,
+			"If a list of repositories is not informed, a github user or organization must be: argument is required",
+			err.Error(),
+		)
+	})
+
+	t.Run("parses arguments", func(t *testing.T) {
+		os.Args = []string{
+			"directory",
+			"--github_token=token",
+			"--repo_name_matches=apply_codemod_test",
+			"--local_dir=repository/dir/in/my/computer",
+		}
+
+		applier, err := New()
+
+		assert.NoError(t, err)
+
+		repoNameMatches := "apply_codemod_test"
+		localDir := "repository/dir/in/my/computer"
+
+		expected := CliArgs{
+			GithubToken:     "token",
+			RepoNameMatches: &repoNameMatches,
+			LocalDirectory:  &localDir,
+			Repositories:    map[string]string{},
+			Replacements:    map[string]string{},
+		}
+
+		assert.Equal(t, expected, applier.args)
+	})
 }
