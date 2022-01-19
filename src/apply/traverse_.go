@@ -71,9 +71,7 @@ func applyCodemodsToDirectory(directory string, replacements map[string]string, 
 			sourceCode = re.ReplaceAll(sourceCode, []byte(replacement))
 		}
 
-		if !isGoFile(info.Name()) {
-
-		} else {
+		if isGoFile(info.Name()) {
 			code, err := codemod.New(codemod.NewInput{
 				SourceCode: sourceCode,
 				FilePath:   path,
