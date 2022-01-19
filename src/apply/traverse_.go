@@ -2,7 +2,6 @@ package apply
 
 import (
 	"apply_codemod/src/codemod"
-	"fmt"
 	"io/fs"
 	"io/ioutil"
 	"os"
@@ -48,13 +47,10 @@ func applyCodemodsToDirectory(directory string, replacements map[string]string, 
 		}
 	}()
 
-	fmt.Printf("\n\naaaaaaa os.Args %+v\n\n", os.Args)
-	fmt.Printf("\n\naaaaaaa replacements %+v\n\n", replacements)
 	replacementRegexes, err := compileRegexes(replacements)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	fmt.Printf("\n\naaaaaaa replacementRegexes %+v\n\n", replacementRegexes)
 
 	err = filepath.Walk("./", func(path string, info fs.FileInfo, _ error) error {
 		if strings.Contains(path, "vendor") || info == nil || info.IsDir() {
@@ -75,9 +71,7 @@ func applyCodemodsToDirectory(directory string, replacements map[string]string, 
 			sourceCode = re.ReplaceAll(sourceCode, []byte(replacement))
 		}
 
-		if !isGoFile(info.Name()) {
-
-		} else {
+		if isGoFile(info.Name()) {
 			code, err := codemod.New(codemod.NewInput{
 				SourceCode: sourceCode,
 				FilePath:   path,
