@@ -265,7 +265,7 @@ func (applier *Applier) apply(ctx context.Context) error {
 
 		repositoriesThatUserWants := make([]Repository, 0)
 
-		for _, repository := range repositories {
+		for i, repository := range repositories {
 			prompt := fmt.Sprintf(`\
 Repository %s has %d matches.
 
@@ -299,7 +299,7 @@ Do you want to apply codemods to %s ?
 			if answer == "yes" {
 				repositoriesThatUserWants = append(repositoriesThatUserWants, repository)
 			} else if answer == "yes to all" {
-				repositoriesThatUserWants = repositories
+				repositoriesThatUserWants = append(repositoriesThatUserWants, repositories[i:]...)
 				break
 			}
 		}
