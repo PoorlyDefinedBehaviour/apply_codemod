@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"regexp"
 	"strings"
 
 	"apply_codemod/src/apply/github"
 	"apply_codemod/src/codemod"
 
 	"github.com/fatih/color"
-	googlegithub "github.com/google/go-github/v39/github"
 	"github.com/google/uuid"
 	"github.com/jessevdk/go-flags"
 	"github.com/pkg/errors"
@@ -33,9 +31,12 @@ type CliArgs struct {
 	GithubUser *string `long:"github_user" description:"github user that owns the target repositories"`
 	// Github organization that owns the target repositories.
 	GithubOrg *string `long:"github_org" description:"github organization that owns the target repositories"`
-	// Regex that will be used to decide if one of the repositories
-	// belonging to `Profile` should have codemods applied to it.
+	// Github search api input. Will be used to find repositories
+	// with specific names.
 	RepoNameMatches *string `long:"repo_name_matches" description:"regex used to match repositories. codemods will be applied to any repository that matches the regex"`
+	// Github search api input. Will be used to find repositories
+	// that contain the specified contents.
+	RepoContains *string `long:"repo_contains" description:"contents to look for in repositories"`
 	// If the user wants to apply codemods to a directory in
 	// their machine, they can inform it using the --local_dir flag.
 	LocalDirectory *string `long:"local_dir" description:"directory on your machine that codemods should be applied to"`
@@ -125,33 +126,54 @@ func (applier *Applier) GetRepositories(ctx context.Context) (out []Repository, 
 	if len(applier.args.Repositories) > 0 {
 		for repoURL, branch := range applier.args.Repositories {
 			branch := branch
-			out = append(out, Repository{URL: repoURL, Branch: branch})
+			out = append(out, Repository{URL: repoURL, Branch: &branch})
 		}
 	} else {
-		var repos []*googlegithub.Repository
+		var query string
+
+		if applier.args.GithubOrg != nil {
+			query = fmt.Sprintf("%s org:%s", query, *applier.args.GithubOrg)
+		}
 
 		if applier.args.GithubUser != nil {
-			repos, err = applier.githubClient.GetRepositories(ctx, *applier.args.GithubUser)
+			query = fmt.Sprintf("%s user:%s", query, *applier.args.GithubUser)
+		}
+
+		if applier.args.RepoContains != nil {
+			query = fmt.Sprintf("%s %s", *applier.args.RepoContains, query)
+
+			log.Printf("code searching. query=%s\n", query)
+
+			searchResult, err := applier.githubClient.CodeSearch(ctx, query)
 			if err != nil {
 				return out, errors.WithStack(err)
 			}
-		} else {
-			repos, err = applier.githubClient.GetOrgRepositories(ctx, *applier.args.GithubOrg)
-			if err != nil {
-				return out, errors.WithStack(err)
-			}
-		}
 
-		var repoNameRegex *regexp.Regexp
-		if applier.args.RepoNameMatches != nil {
-			repoNameRegex = regexp.MustCompile(*applier.args.RepoNameMatches)
-		}
+			log.Printf("code searching done. found %d results\n", searchResult.GetTotal())
 
-		for _, repo := range repos {
-			if repoNameRegex == nil || repoNameRegex.MatchString(*repo.Name) {
+			for _, result := range searchResult.CodeResults {
 				out = append(out, Repository{
-					URL:    strings.ReplaceAll(repo.GetCloneURL(), ".git", ""),
-					Branch: *repo.DefaultBranch,
+					URL: *result.Repository.HTMLURL,
+					// We don't know which branch is the default.
+					Branch: nil,
+				})
+			}
+		} else if applier.args.RepoNameMatches != nil {
+			query = fmt.Sprintf("%s %s", *applier.args.RepoContains, query)
+
+			log.Printf("repository searching. query=%s\n", query)
+
+			searchResult, err := applier.githubClient.RepositorySearch(ctx, query)
+			if err != nil {
+				return out, errors.WithStack(err)
+			}
+
+			log.Printf("code searching done. found %d results\n", searchResult.GetTotal())
+
+			for _, repository := range searchResult.Repositories {
+				out = append(out, Repository{
+					URL:    *repository.HTMLURL,
+					Branch: repository.DefaultBranch,
 				})
 			}
 		}
@@ -166,7 +188,7 @@ type Repository struct {
 	// The branch to which the codemods should be applied.
 	//
 	// Codemods are applied to the default branch if the branch is not specified.
-	Branch string
+	Branch *string
 }
 
 // Applies codemods.
@@ -234,11 +256,24 @@ func (applier *Applier) applyCodemodsToRemoteRepositories(ctx context.Context, r
 			return errors.WithStack(err)
 		}
 
+		// If it is not a user specified repository
+		// we won't know which branch to apply codemods to.
+		//
+		// Because of that, we try to apply them to the default branch.
+		if repository.Branch == nil {
+			branch, err := repo.DefaultBranch()
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
+			repository.Branch = &branch
+		}
+
 		err = repo.Checkout(github.CheckoutOptions{
-			Branch: repository.Branch,
+			Branch: *repository.Branch,
 		})
 		if err != nil {
-			return errors.Wrapf(err, "git checkout %s failed in %s", repository.Branch, repository.URL)
+			return errors.Wrapf(err, "git checkout %s failed in %s", *repository.Branch, repository.URL)
 		}
 
 		codemodBranch := uuid.New().String()
@@ -309,7 +344,7 @@ func (applier *Applier) applyCodemodsToRemoteRepositories(ctx context.Context, r
 			RepoURL:     repository.URL,
 			Title:       "[AUTO GENERATED] applied codemods",
 			FromBranch:  codemodBranch,
-			ToBranch:    repository.Branch,
+			ToBranch:    *repository.Branch,
 			Description: applier.buildPullRequestDescription(),
 		})
 		if err != nil {
