@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jessevdk/go-flags"
 	"github.com/pkg/errors"
+	"github.com/tcnksm/go-input"
 )
 
 const tempFolder = "./codemod_tmp"
@@ -92,6 +93,13 @@ type Applier struct {
 	codemods []Codemod
 	// Client used to interact with the Github api.
 	githubClient *github.T
+	// Library used to get input from the user.
+	//
+	// It helps us ask questions like
+	// >> Do you want to proceed? [yes/no]
+	//
+	// and wait for the user to type yes or no, for example.
+	ui *input.UI
 }
 
 func New() (out Applier, err error) {
@@ -107,7 +115,12 @@ func New() (out Applier, err error) {
 		AccessToken: args.GithubToken,
 	})
 
-	out = Applier{args: args, githubClient: githubClient}
+	ui := &input.UI{
+		Writer: os.Stdout,
+		Reader: os.Stdin,
+	}
+
+	out = Applier{args: args, githubClient: githubClient, ui: ui}
 
 	return out, nil
 }
@@ -122,7 +135,7 @@ func (applier *Applier) ShouldApplyLocally() bool {
 //
 // Otherwise, gets repositories from github using the username or organization
 // provided by the user in the command line.
-func (applier *Applier) GetRepositories(ctx context.Context) (out []Repository, err error) {
+func (applier *Applier) getRepositories(ctx context.Context) (out []Repository, err error) {
 	if len(applier.args.Repositories) > 0 {
 		for repoURL, branch := range applier.args.Repositories {
 			branch := branch
@@ -132,11 +145,9 @@ func (applier *Applier) GetRepositories(ctx context.Context) (out []Repository, 
 		var query string
 
 		if applier.args.GithubOrg != nil {
-			query = fmt.Sprintf("%s org:%s", query, *applier.args.GithubOrg)
-		}
-
-		if applier.args.GithubUser != nil {
-			query = fmt.Sprintf("%s user:%s", query, *applier.args.GithubUser)
+			query = fmt.Sprintf("org:%s", *applier.args.GithubOrg)
+		} else if applier.args.GithubUser != nil {
+			query = fmt.Sprintf("user:%s", *applier.args.GithubUser)
 		}
 
 		if applier.args.RepoContains != nil {
@@ -148,8 +159,6 @@ func (applier *Applier) GetRepositories(ctx context.Context) (out []Repository, 
 			if err != nil {
 				return out, errors.WithStack(err)
 			}
-
-			log.Printf("code searching done. found %d results\n", searchResult.GetTotal())
 
 			for _, result := range searchResult.CodeResults {
 				out = append(out, Repository{
@@ -167,8 +176,6 @@ func (applier *Applier) GetRepositories(ctx context.Context) (out []Repository, 
 			if err != nil {
 				return out, errors.WithStack(err)
 			}
-
-			log.Printf("code searching done. found %d results\n", searchResult.GetTotal())
 
 			for _, repository := range searchResult.Repositories {
 				out = append(out, Repository{
@@ -221,12 +228,30 @@ func (applier *Applier) apply(ctx context.Context) error {
 	} else {
 		log.Println("applying codemods to remote repositories")
 
-		repositories, err := applier.GetRepositories(ctx)
+		repositories, err := applier.getRepositories(ctx)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
-		if err := applier.applyCodemodsToRemoteRepositories(ctx, repositories); err != nil {
+		log.Printf("found %d repositories", len(repositories))
+
+		repositoriesThatUserWants := make([]Repository, 0)
+
+		for _, repository := range repositories {
+			answer, err := applier.ui.Select(fmt.Sprintf("apply codemods to %s ?", repository.URL), []string{"yes", "no"}, &input.Options{
+				Required: true,
+				Loop:     true,
+			})
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
+			if answer == "yes" {
+				repositoriesThatUserWants = append(repositoriesThatUserWants, repository)
+			}
+		}
+
+		if err := applier.applyCodemodsToRemoteRepositories(ctx, repositoriesThatUserWants); err != nil {
 			return errors.WithStack(err)
 		}
 	}
