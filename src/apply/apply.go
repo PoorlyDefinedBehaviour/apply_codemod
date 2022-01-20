@@ -299,7 +299,7 @@ Do you want to apply codemods to %s ?
 			if answer == "yes" {
 				repositoriesThatUserWants = append(repositoriesThatUserWants, repository)
 			} else if answer == "yes to all" {
-				// Yes to all means:
+				// "yes to all" means:
 				//
 				// I want to keep the current repository and every other repository
 				// that comes after it.
