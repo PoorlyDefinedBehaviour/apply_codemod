@@ -11,6 +11,7 @@ Application Options:
       --github_user=       github user that owns the target repositories
       --github_org=        github organization that owns the target repositories
       --repo_name_matches= regex used to match repositories. codemods will be applied to any repository that matches the regex
+      --repo_contains=     contents to look for in repositories
       --local_dir=         directory on your machine that codemods should be applied to
       --repos=             list of repositories to apply codemod to. should be a list of repository_url:branch
       --replace=           replaces whatever matches the regex on left to whatever is on the right

@@ -115,6 +115,20 @@ type CheckoutOptions struct {
 	Force  bool
 }
 
+// Returns the repository default branch. Usually master or main.
+func (repo *Repository) DefaultBranch() (string, error) {
+	head, err := repo.repo.Head()
+	if err != nil {
+		return "", errors.WithStack(err)
+	}
+
+	// head.Name() returns something like: refs/heads/main
+	// but we only want the branch name.
+	branch := strings.ReplaceAll(string(head.Name()), "refs/heads/", "")
+
+	return branch, nil
+}
+
 func (repo *Repository) Checkout(options CheckoutOptions) error {
 	worktree, err := repo.repo.Worktree()
 	if err != nil {
@@ -210,6 +224,32 @@ func (github *T) GetOrgRepositories(ctx context.Context, org string) ([]*googleg
 	}
 
 	return repos, nil
+}
+
+func (github *T) CodeSearch(ctx context.Context, search string) (*googlegithub.CodeSearchResult, error) {
+	result, _, err := github.client.Search.Code(ctx, search, &googlegithub.SearchOptions{
+		ListOptions: googlegithub.ListOptions{
+			PerPage: 1000,
+		},
+	})
+	if err != nil {
+		return result, errors.WithStack(err)
+	}
+
+	return result, nil
+}
+
+func (github *T) RepositorySearch(ctx context.Context, search string) (*googlegithub.RepositoriesSearchResult, error) {
+	result, _, err := github.client.Search.Repositories(ctx, search, &googlegithub.SearchOptions{
+		ListOptions: googlegithub.ListOptions{
+			PerPage: 1000,
+		},
+	})
+	if err != nil {
+		return result, errors.WithStack(err)
+	}
+
+	return result, nil
 }
 
 type RepoInfo struct {
