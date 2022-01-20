@@ -228,6 +228,7 @@ func (github *T) GetOrgRepositories(ctx context.Context, org string) ([]*googleg
 
 func (github *T) CodeSearch(ctx context.Context, search string) (*googlegithub.CodeSearchResult, error) {
 	result, _, err := github.client.Search.Code(ctx, search, &googlegithub.SearchOptions{
+		TextMatch: true,
 		ListOptions: googlegithub.ListOptions{
 			PerPage: 1000,
 		},

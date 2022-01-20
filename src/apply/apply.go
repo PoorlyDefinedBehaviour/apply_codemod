@@ -161,8 +161,17 @@ func (applier *Applier) getRepositories(ctx context.Context) (out []Repository, 
 			}
 
 			for _, result := range searchResult.CodeResults {
+				textMatches := make([]TextMatch, 0, len(result.TextMatches))
+
+				for _, textMatch := range result.TextMatches {
+					textMatches = append(textMatches, TextMatch{
+						Fragment: *textMatch.Fragment,
+						Match:    *textMatch.Matches[0].Text,
+					})
+				}
 				out = append(out, Repository{
-					URL: *result.Repository.HTMLURL,
+					URL:         *result.Repository.HTMLURL,
+					TextMatches: textMatches,
 					// We don't know which branch is the default.
 					Branch: nil,
 				})
@@ -189,6 +198,21 @@ func (applier *Applier) getRepositories(ctx context.Context) (out []Repository, 
 	return out, nil
 }
 
+type Range struct {
+	start int
+	end   int
+}
+
+// A text match is a snippet of the repository contents
+// that matched a query sent to the Github code search api.
+type TextMatch struct {
+	// Snippet that matched the query with some of the contents
+	// that are close to it.
+	Fragment string
+	// Contents that matched because they are in `Fragment`.
+	Match string
+}
+
 type Repository struct {
 	// The repository url, used to git clone.
 	URL string
@@ -196,6 +220,10 @@ type Repository struct {
 	//
 	// Codemods are applied to the default branch if the branch is not specified.
 	Branch *string
+	// List of text matches returned by the Github code search api.
+	//
+	// Note that the list will be empty if the Github code search api wasn't used.
+	TextMatches []TextMatch
 }
 
 // Applies codemods.
@@ -238,7 +266,29 @@ func (applier *Applier) apply(ctx context.Context) error {
 		repositoriesThatUserWants := make([]Repository, 0)
 
 		for _, repository := range repositories {
-			answer, err := applier.ui.Select(fmt.Sprintf("apply codemods to %s ?", repository.URL), []string{"yes", "no"}, &input.Options{
+			prompt := fmt.Sprintf(`\
+Repository %s has %d matches.
+
+The first match is:
+
+~~~
+
+%s
+
+~~~
+
+Do you want to apply codemods to %s ?
+`,
+				color.GreenString(repository.URL),
+				len(repository.TextMatches),
+				strings.ReplaceAll(
+					repository.TextMatches[0].Fragment,
+					repository.TextMatches[0].Match,
+					color.GreenString(repository.TextMatches[0].Match),
+				),
+				repository.URL,
+			)
+			answer, err := applier.ui.Select(prompt, []string{"yes", "no", "yes to all"}, &input.Options{
 				Required: true,
 				Loop:     true,
 			})
@@ -248,6 +298,9 @@ func (applier *Applier) apply(ctx context.Context) error {
 
 			if answer == "yes" {
 				repositoriesThatUserWants = append(repositoriesThatUserWants, repository)
+			} else if answer == "yes to all" {
+				repositoriesThatUserWants = repositories
+				break
 			}
 		}
 
@@ -265,6 +318,7 @@ func (applier *Applier) apply(ctx context.Context) error {
 // changed files after codemods have been applied.
 func (applier *Applier) applyCodemodsToRemoteRepositories(ctx context.Context, repositories []Repository) error {
 	for _, repository := range repositories {
+		log.Printf("applying codemods to %s", repository.URL)
 		githubClient := github.New(github.Config{
 			AccessToken: applier.args.GithubToken,
 		})
