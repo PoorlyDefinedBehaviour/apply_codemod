@@ -3,9 +3,9 @@ package apply
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strings"
+	"sync"
 
 	"apply_codemod/src/apply/github"
 	"apply_codemod/src/codemod"
@@ -15,6 +15,7 @@ import (
 	"github.com/jessevdk/go-flags"
 	"github.com/pkg/errors"
 	"github.com/tcnksm/go-input"
+	"golang.org/x/sync/semaphore"
 )
 
 const tempFolder = "./codemod_tmp"
@@ -153,7 +154,7 @@ func (applier *Applier) getRepositories(ctx context.Context) (out []Repository, 
 		if applier.args.RepoContains != nil {
 			query = fmt.Sprintf("%s %s", *applier.args.RepoContains, query)
 
-			log.Printf("code searching. query=%s\n", query)
+			fmt.Printf("code searching. query=%s\n", query)
 
 			searchResult, err := applier.githubClient.CodeSearch(ctx, query)
 			if err != nil {
@@ -179,7 +180,7 @@ func (applier *Applier) getRepositories(ctx context.Context) (out []Repository, 
 		} else if applier.args.RepoNameMatches != nil {
 			query = fmt.Sprintf("%s %s", *applier.args.RepoContains, query)
 
-			log.Printf("repository searching. query=%s\n", query)
+			fmt.Printf("repository searching. query=%s\n", query)
 
 			searchResult, err := applier.githubClient.RepositorySearch(ctx, query)
 			if err != nil {
@@ -250,18 +251,18 @@ func Apply(ctx context.Context, codemods []Codemod) error {
 
 func (applier *Applier) apply(ctx context.Context) error {
 	if applier.ShouldApplyLocally() {
-		log.Printf("applying codemods to local directory: %s\n", *applier.args.LocalDirectory)
+		fmt.Printf("applying codemods to local directory: %s\n", *applier.args.LocalDirectory)
 
 		applier.applyCodemodsLocally(ctx)
 	} else {
-		log.Println("applying codemods to remote repositories")
+		fmt.Println("applying codemods to remote repositories")
 
 		repositories, err := applier.getRepositories(ctx)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
-		log.Printf("found %d repositories", len(repositories))
+		fmt.Printf("found %d repositories", len(repositories))
 
 		repositoriesThatUserWants := make([]Repository, 0)
 
@@ -308,136 +309,223 @@ Do you want to apply codemods to %s ?
 			}
 		}
 
-		if err := applier.applyCodemodsToRemoteRepositories(ctx, repositoriesThatUserWants); err != nil {
-			return errors.WithStack(err)
+		results := applier.applyCodemodsToRemoteRepositories(ctx, repositoriesThatUserWants)
+
+		fmt.Printf("%s %s: %d repositories\n", color.BlueString("-"), color.BlueString("NOT CHANGED"), len(results.NotChanged))
+
+		for _, result := range results.NotChanged {
+			fmt.Println(result.URL)
+		}
+
+		fmt.Printf("%s %s: %d errors\n", color.RedString("-"), color.RedString("ERRORS"), len(results.WithErrors))
+
+		for _, result := range results.WithErrors {
+			fmt.Printf("%s: %s", result.repository.URL, result.err)
+		}
+
+		fmt.Printf("%s %s: %d repositories\n", color.GreenString("-"), color.GreenString("CHANGES"), len(results.Changed))
+
+		for _, result := range results.Changed {
+			fmt.Println(result.pullRequestURL)
 		}
 	}
 
 	return nil
 }
 
+// Contains information so we can know what happened
+// after applying codemods to a repository.
+
+type applyCodemodResult struct {
+	Changed    []repositoryWithPullRequest
+	NotChanged []Repository
+	WithErrors []repositoryWithError
+}
+
+type repositoryWithPullRequest struct {
+	repository     Repository
+	pullRequestURL string
+}
+
+type repositoryWithError struct {
+	repository Repository
+	err        error
+}
+
 // Clones repositories and applies codemods to them.
 //
 // Pull requests with the changes are created, if there are
 // changed files after codemods have been applied.
-func (applier *Applier) applyCodemodsToRemoteRepositories(ctx context.Context, repositories []Repository) error {
+func (applier *Applier) applyCodemodsToRemoteRepositories(ctx context.Context, repositories []Repository) applyCodemodResult {
+	fmt.Printf("applying codemods to %d repositories\n", len(repositories))
+
+	resultLock := sync.Mutex{}
+	result := applyCodemodResult{}
+
+	// We allow codemods to be applied to 10 repositories
+	// concurrently.
+	sem := semaphore.NewWeighted(10)
+
+	waitGroup := sync.WaitGroup{}
+	waitGroup.Add(len(repositories))
+
 	for _, repository := range repositories {
-		log.Printf("applying codemods to %s", repository.URL)
-		githubClient := github.New(github.Config{
-			AccessToken: applier.args.GithubToken,
-		})
+		repository := repository
 
-		if err := os.RemoveAll(tempFolder); err != nil {
-			return errors.WithStack(err)
-		}
+		go func() {
+			if err := sem.Acquire(ctx, 1); err != nil {
+				panic(err)
+			}
+			defer sem.Release(1)
 
-		repo, err := githubClient.Clone(github.CloneOptions{
-			RepoURL: repository.URL,
-			Folder:  tempFolder,
-		})
-		if err != nil {
-			return errors.WithStack(err)
-		}
+			fmt.Printf("applying codemods to %s\n", repository.URL)
 
-		// If it is not a user specified repository
-		// we won't know which branch to apply codemods to.
-		//
-		// Because of that, we try to apply them to the default branch.
-		if repository.Branch == nil {
-			branch, err := repo.DefaultBranch()
+			applyCodemod := func() (pullRequestURL *string, err error) {
+				githubClient := github.New(github.Config{
+					AccessToken: applier.args.GithubToken,
+				})
+
+				repoTempFolder := fmt.Sprintf("%s/%s", tempFolder, repository.URL)
+
+				if err := os.RemoveAll(repoTempFolder); err != nil {
+					return pullRequestURL, err
+				}
+
+				repo, err := githubClient.Clone(github.CloneOptions{
+					RepoURL: repository.URL,
+					Folder:  repoTempFolder,
+				})
+				if err != nil {
+					return pullRequestURL, err
+				}
+
+				// If it is not a user specified repository
+				// we won't know which branch to apply codemods to.
+				//
+				// Because of that, we try to apply them to the default branch.
+				if repository.Branch == nil {
+					branch, err := repo.DefaultBranch()
+					if err != nil {
+						return pullRequestURL, err
+					}
+
+					repository.Branch = &branch
+				}
+
+				err = repo.Checkout(github.CheckoutOptions{
+					Branch: *repository.Branch,
+				})
+				if err != nil {
+					return pullRequestURL, errors.Wrapf(err, "git checkout %s failed in %s", *repository.Branch, repository.URL)
+				}
+
+				codemodBranch := uuid.New().String()
+
+				err = repo.Checkout(github.CheckoutOptions{
+					Branch: codemodBranch,
+					Create: true,
+					Force:  true,
+				})
+				if err != nil {
+					return pullRequestURL, err
+				}
+
+				originalDir, err := os.Getwd()
+				if err != nil {
+					return pullRequestURL, err
+				}
+
+				if err := os.Chdir(tempFolder); err != nil {
+					return pullRequestURL, err
+				}
+
+				for _, mod := range applier.codemods {
+					if f, ok := mod.Transform.(func(codemod.Project)); ok {
+						f(codemod.Project{})
+					}
+				}
+
+				err = applyCodemodsToDirectory(tempFolder, applier.args.Replacements, applier.codemods)
+				if err != nil {
+					return pullRequestURL, err
+				}
+
+				if err := os.Chdir(originalDir); err != nil {
+					return pullRequestURL, err
+				}
+
+				err = repo.Add(github.AddOptions{
+					All: true,
+				})
+				if err != nil {
+					return pullRequestURL, err
+				}
+
+				affectedFileNames, err := repo.FilesAffected()
+				if err != nil {
+					return pullRequestURL, err
+				}
+
+				if len(affectedFileNames) == 0 {
+					return pullRequestURL, nil
+				}
+
+				err = repo.Commit(
+					"applied codemods",
+					github.CommitOptions{All: true},
+				)
+				if err != nil {
+					return pullRequestURL, err
+				}
+
+				err = repo.Push()
+				if err != nil {
+					return pullRequestURL, err
+				}
+
+				pullRequest, err := githubClient.PullRequest(github.PullRequestOptions{
+					RepoURL:     repository.URL,
+					Title:       "[AUTO GENERATED] applied codemods",
+					FromBranch:  codemodBranch,
+					ToBranch:    *repository.Branch,
+					Description: applier.buildPullRequestDescription(),
+				})
+				if err != nil {
+					return pullRequestURL, err
+				}
+
+				pullRequestURL = pullRequest.HTMLURL
+
+				return pullRequestURL, nil
+			}
+
+			pullRequestURL, err := applyCodemod()
+
+			resultLock.Lock()
+			defer resultLock.Unlock()
+
 			if err != nil {
-				return errors.WithStack(err)
+				result.WithErrors = append(result.WithErrors, repositoryWithError{
+					repository: repository,
+					err:        errors.WithStack(err),
+				})
+			} else if pullRequestURL != nil {
+				result.Changed = append(result.Changed, repositoryWithPullRequest{
+					repository:     repository,
+					pullRequestURL: *pullRequestURL,
+				})
+			} else {
+				// The pull request url will be nil if a pull request has not been created.
+				result.NotChanged = append(result.NotChanged, repository)
 			}
 
-			repository.Branch = &branch
-		}
-
-		err = repo.Checkout(github.CheckoutOptions{
-			Branch: *repository.Branch,
-		})
-		if err != nil {
-			return errors.Wrapf(err, "git checkout %s failed in %s", *repository.Branch, repository.URL)
-		}
-
-		codemodBranch := uuid.New().String()
-
-		err = repo.Checkout(github.CheckoutOptions{
-			Branch: codemodBranch,
-			Create: true,
-			Force:  true,
-		})
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		originalDir, err := os.Getwd()
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		if err := os.Chdir(tempFolder); err != nil {
-			return errors.WithStack(err)
-		}
-
-		for _, mod := range applier.codemods {
-			if f, ok := mod.Transform.(func(codemod.Project)); ok {
-				f(codemod.Project{})
-			}
-		}
-
-		err = applyCodemodsToDirectory(tempFolder, applier.args.Replacements, applier.codemods)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		if err := os.Chdir(originalDir); err != nil {
-			return errors.WithStack(err)
-		}
-
-		err = repo.Add(github.AddOptions{
-			All: true,
-		})
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		filesAffected, err := repo.FilesAffected()
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		if len(filesAffected) == 0 {
-			fmt.Printf("%s %s\n", color.RedString("[NOT CHANGED]"), repository.URL)
-			continue
-		}
-
-		err = repo.Commit(
-			"applied codemods",
-			github.CommitOptions{All: true},
-		)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		err = repo.Push()
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		pullRequest, err := githubClient.PullRequest(github.PullRequestOptions{
-			RepoURL:     repository.URL,
-			Title:       "[AUTO GENERATED] applied codemods",
-			FromBranch:  codemodBranch,
-			ToBranch:    *repository.Branch,
-			Description: applier.buildPullRequestDescription(),
-		})
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		fmt.Printf("%s %s\n", color.GreenString("[CREATED]"), *pullRequest.HTMLURL)
+			waitGroup.Done()
+		}()
 	}
 
-	return nil
+	waitGroup.Wait()
+
+	return result
 }
 
 // Applies codemods to a local directory.
