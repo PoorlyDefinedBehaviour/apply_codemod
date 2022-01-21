@@ -1,11 +1,11 @@
 package main_test
 
 import (
-	"apply_codemod/src/codemod"
 	"go/ast"
 	"strings"
 	"testing"
 
+	"github.com/PoorlyDefinedBehaviour/apply_codemod/src/codemod"
 	"github.com/stretchr/testify/assert"
 )
 

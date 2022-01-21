@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"apply_codemod/src/codemod"
+	"github.com/PoorlyDefinedBehaviour/apply_codemod/src/codemod"
 	"github.com/stretchr/testify/assert"
 )
 
