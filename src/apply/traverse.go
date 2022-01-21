@@ -1,7 +1,6 @@
 package apply
 
 import (
-	"apply_codemod/src/codemod"
 	"io/fs"
 	"io/ioutil"
 	"os"
@@ -9,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/PoorlyDefinedBehaviour/apply_codemod/src/codemod"
 	"github.com/pkg/errors"
 )
 

@@ -1,12 +1,12 @@
 package apply
 
 import (
-	"apply_codemod/src/codemod"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
 
+	"github.com/PoorlyDefinedBehaviour/apply_codemod/src/codemod"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
