@@ -7,9 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	"apply_codemod/src/apply/github"
-	"apply_codemod/src/codemod"
-
+	"github.com/PoorlyDefinedBehaviour/apply_codemod/src/apply/github"
+	"github.com/PoorlyDefinedBehaviour/apply_codemod/src/codemod"
 	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/jessevdk/go-flags"
