@@ -1,8 +1,6 @@
 package main
 
 import (
-	"apply_codemod/src/apply"
-	"apply_codemod/src/codemod"
 	"context"
 	"flag"
 	"fmt"
@@ -11,6 +9,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/PoorlyDefinedBehaviour/apply_codemod/src/apply"
+	"github.com/PoorlyDefinedBehaviour/apply_codemod/src/codemod"
 )
 
 func installPkg(pkgName string) func(codemod.Project) {

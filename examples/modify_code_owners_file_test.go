@@ -1,10 +1,10 @@
 package main
 
 import (
-	"apply_codemod/src/codemod"
 	"fmt"
 	"os"
 
+	"github.com/PoorlyDefinedBehaviour/apply_codemod/src/codemod"
 	"github.com/pkg/errors"
 )
 
