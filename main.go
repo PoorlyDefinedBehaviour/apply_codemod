@@ -1,8 +1,9 @@
 package main
 
 import (
-	"apply_codemod/src/apply"
 	"context"
+
+	"github.com/PoorlyDefinedBehaviour/apply_codemod/src/apply"
 )
 
 func main() {
