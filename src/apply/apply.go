@@ -25,6 +25,16 @@ type Codemod struct {
 	Transform   interface{}
 }
 
+type projectCodemod struct {
+	description string
+	transform   func(codemod.Project)
+}
+
+type sourceFileCodemod struct {
+	description string
+	transform   func(*codemod.SourceFile)
+}
+
 // Contains command line arguments that the user can provide.
 type CliArgs struct {
 	// Token used to clone and make pull requests on github.
@@ -90,8 +100,10 @@ func getCliArgs(args []string) (CliArgs, error) {
 type Applier struct {
 	// User provided command line arguments.
 	args CliArgs
-	// List of codemods to apply.
-	codemods []Codemod
+	// List of codemods to apply to each Go file in the repository.
+	sourceFileCodemods []sourceFileCodemod
+	// List of codemods to apply to each repository.
+	projectCodemods []projectCodemod
 	// Client used to interact with the Github api.
 	githubClient *github.T
 	// Library used to get input from the user.
@@ -439,15 +451,14 @@ func (applier *Applier) applyCodemodsToRemoteRepositories(ctx context.Context, r
 					return pullRequestURL, err
 				}
 
-				for _, mod := range applier.codemods {
-					if f, ok := mod.Transform.(func(codemod.Project)); ok {
-						f(codemod.Project{})
-					}
+				for _, mod := range applier.projectCodemods {
+					mod.transform(codemod.Project{})
 				}
 
-				err = applyCodemodsToDirectory(tempFolder, applier.args.Replacements, applier.codemods)
-				if err != nil {
-					return pullRequestURL, err
+				if len(applier.sourceFileCodemods) > 0 {
+					if err := applyCodemodsToDirectory(tempFolder, applier.args.Replacements, applier.sourceFileCodemods); err != nil {
+						return pullRequestURL, err
+					}
 				}
 
 				if err := os.Chdir(originalDir); err != nil {
@@ -539,14 +550,14 @@ func (applier *Applier) applyCodemodsLocally(ctx context.Context) error {
 		return errors.WithStack(err)
 	}
 
-	for _, mod := range applier.codemods {
-		if f, ok := mod.Transform.(func(codemod.Project)); ok {
-			f(codemod.Project{})
-		}
+	for _, mod := range applier.projectCodemods {
+		mod.transform(codemod.Project{})
 	}
 
-	if err := applyCodemodsToDirectory(*applier.args.LocalDirectory, applier.args.Replacements, applier.codemods); err != nil {
-		return errors.WithStack(err)
+	if len(applier.sourceFileCodemods) > 0 {
+		if err := applyCodemodsToDirectory(*applier.args.LocalDirectory, applier.args.Replacements, applier.sourceFileCodemods); err != nil {
+			return errors.WithStack(err)
+		}
 	}
 
 	if err := os.Chdir(originalDir); err != nil {
@@ -569,16 +580,20 @@ func (applier *Applier) buildPullRequestDescription() string {
 		}
 	}
 
-	if len(applier.codemods) > 0 {
+	if len(applier.projectCodemods) > 0 || len(applier.sourceFileCodemods) > 0 {
 		builder.WriteString("Applied the following codemods:\n\n")
+	}
 
-		for i, codemod := range applier.codemods {
-			builder.WriteString(fmt.Sprintf("λ %s", codemod.Description))
+	for _, codemod := range applier.projectCodemods {
+		builder.WriteString(fmt.Sprintf("λ %s", codemod.description))
 
-			if i < len(applier.codemods)-1 {
-				builder.WriteString("\n\n")
-			}
-		}
+		builder.WriteString("\n")
+	}
+
+	for _, codemod := range applier.sourceFileCodemods {
+		builder.WriteString(fmt.Sprintf("λ %s", codemod.description))
+
+		builder.WriteString("\n")
 	}
 
 	return builder.String()
