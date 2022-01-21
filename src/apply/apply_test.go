@@ -14,20 +14,19 @@ import (
 func Test_buildPullRequestDescription(t *testing.T) {
 	t.Parallel()
 
-	codemods := []Codemod{
-		{Description: "a"},
-		{Description: "b"},
-		{Description: "c"},
+	codemods := []sourceFileCodemod{
+		{description: "a"},
+		{description: "b"},
+		{description: "c"},
 	}
 
 	expected :=
 		`Applied the following codemods:
 
 λ a
-
 λ b
-
-λ c`
+λ c
+`
 
 	os.Args = []string{
 		"directory",
@@ -38,7 +37,7 @@ func Test_buildPullRequestDescription(t *testing.T) {
 
 	applier, err := New()
 
-	applier.codemods = codemods
+	applier.sourceFileCodemods = codemods
 
 	assert.NoError(t, err)
 
@@ -68,10 +67,10 @@ func Test_applyCodemodsToDirectory(t *testing.T) {
 		t.Run("if reason is an error, returns it", func(t *testing.T) {
 			panicErr := errors.New("oops")
 
-			mods := []Codemod{
+			mods := []sourceFileCodemod{
 				{
-					Description: "will panic",
-					Transform:   func(_ *codemod.SourceFile) { panic(panicErr) },
+					description: "will panic",
+					transform:   func(_ *codemod.SourceFile) { panic(panicErr) },
 				},
 			}
 
@@ -81,10 +80,10 @@ func Test_applyCodemodsToDirectory(t *testing.T) {
 		})
 
 		t.Run("if reason is not an error, creates an error with the reason and returns it", func(t *testing.T) {
-			mods := []Codemod{
+			mods := []sourceFileCodemod{
 				{
-					Description: "will panic",
-					Transform:   func(_ *codemod.SourceFile) { panic("a") },
+					description: "will panic",
+					transform:   func(_ *codemod.SourceFile) { panic("a") },
 				},
 			}
 
@@ -96,10 +95,10 @@ func Test_applyCodemodsToDirectory(t *testing.T) {
 
 	t.Run("on success", func(t *testing.T) {
 		t.Run("returns nil", func(t *testing.T) {
-			mods := []Codemod{
+			mods := []sourceFileCodemod{
 				{
-					Description: "no-op",
-					Transform:   func(_ *codemod.SourceFile) {},
+					description: "no-op",
+					transform:   func(_ *codemod.SourceFile) {},
 				},
 			}
 

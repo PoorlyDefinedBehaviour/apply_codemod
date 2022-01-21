@@ -25,6 +25,16 @@ type Codemod struct {
 	Transform   interface{}
 }
 
+type projectCodemod struct {
+	description string
+	transform   func(codemod.Project)
+}
+
+type sourceFileCodemod struct {
+	description string
+	transform   func(*codemod.SourceFile)
+}
+
 // Contains command line arguments that the user can provide.
 type CliArgs struct {
 	// Token used to clone and make pull requests on github.
@@ -90,8 +100,10 @@ func getCliArgs(args []string) (CliArgs, error) {
 type Applier struct {
 	// User provided command line arguments.
 	args CliArgs
-	// List of codemods to apply.
-	codemods []Codemod
+	// List of codemods to apply to each Go file in the repository.
+	sourceFileCodemods []sourceFileCodemod
+	// List of codemods to apply to each repository.
+	projectCodemods []projectCodemod
 	// Client used to interact with the Github api.
 	githubClient *github.T
 	// Library used to get input from the user.
@@ -242,11 +254,30 @@ func Apply(ctx context.Context, codemods []Codemod) error {
 		return errors.WithStack(err)
 	}
 
+	applier.setCodemods(codemods)
+
 	if err := applier.apply(ctx); err != nil {
 		return errors.WithStack(err)
 	}
 
 	return nil
+}
+
+func (applier *Applier) setCodemods(codemods []Codemod) {
+	for _, mod := range codemods {
+		switch transform := mod.Transform.(type) {
+		case func(codemod.Project):
+			applier.projectCodemods = append(applier.projectCodemods, projectCodemod{
+				description: mod.Description,
+				transform:   transform,
+			})
+		case func(*codemod.SourceFile):
+			applier.sourceFileCodemods = append(applier.sourceFileCodemods, sourceFileCodemod{
+				description: mod.Description,
+				transform:   transform,
+			})
+		}
+	}
 }
 
 func (applier *Applier) apply(ctx context.Context) error {
@@ -357,8 +388,6 @@ type repositoryWithError struct {
 // Pull requests with the changes are created, if there are
 // changed files after codemods have been applied.
 func (applier *Applier) applyCodemodsToRemoteRepositories(ctx context.Context, repositories []Repository) applyCodemodResult {
-	fmt.Printf("applying codemods to %d repositories\n", len(repositories))
-
 	resultLock := sync.Mutex{}
 	result := applyCodemodResult{}
 
@@ -439,14 +468,11 @@ func (applier *Applier) applyCodemodsToRemoteRepositories(ctx context.Context, r
 					return pullRequestURL, err
 				}
 
-				for _, mod := range applier.codemods {
-					if f, ok := mod.Transform.(func(codemod.Project)); ok {
-						f(codemod.Project{})
-					}
+				for _, mod := range applier.projectCodemods {
+					mod.transform(codemod.Project{})
 				}
 
-				err = applyCodemodsToDirectory(tempFolder, applier.args.Replacements, applier.codemods)
-				if err != nil {
+				if err := applyCodemodsToDirectory(tempFolder, applier.args.Replacements, applier.sourceFileCodemods); err != nil {
 					return pullRequestURL, err
 				}
 
@@ -539,13 +565,11 @@ func (applier *Applier) applyCodemodsLocally(ctx context.Context) error {
 		return errors.WithStack(err)
 	}
 
-	for _, mod := range applier.codemods {
-		if f, ok := mod.Transform.(func(codemod.Project)); ok {
-			f(codemod.Project{})
-		}
+	for _, mod := range applier.projectCodemods {
+		mod.transform(codemod.Project{})
 	}
 
-	if err := applyCodemodsToDirectory(*applier.args.LocalDirectory, applier.args.Replacements, applier.codemods); err != nil {
+	if err := applyCodemodsToDirectory(*applier.args.LocalDirectory, applier.args.Replacements, applier.sourceFileCodemods); err != nil {
 		return errors.WithStack(err)
 	}
 
@@ -567,18 +591,24 @@ func (applier *Applier) buildPullRequestDescription() string {
 			builder.WriteString(" => ")
 			builder.WriteString(replacement)
 		}
+
+		builder.WriteString("\n\n")
 	}
 
-	if len(applier.codemods) > 0 {
+	if len(applier.projectCodemods) > 0 || len(applier.sourceFileCodemods) > 0 {
 		builder.WriteString("Applied the following codemods:\n\n")
+	}
 
-		for i, codemod := range applier.codemods {
-			builder.WriteString(fmt.Sprintf("λ %s", codemod.Description))
+	for _, codemod := range applier.projectCodemods {
+		builder.WriteString(fmt.Sprintf("λ %s", codemod.description))
 
-			if i < len(applier.codemods)-1 {
-				builder.WriteString("\n\n")
-			}
-		}
+		builder.WriteString("\n")
+	}
+
+	for _, codemod := range applier.sourceFileCodemods {
+		builder.WriteString(fmt.Sprintf("λ %s", codemod.description))
+
+		builder.WriteString("\n")
 	}
 
 	return builder.String()

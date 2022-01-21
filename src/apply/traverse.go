@@ -34,8 +34,16 @@ func compileRegexes(regexes map[string]string) (map[*regexp.Regexp]string, error
 // Traverses `directory` and applies each codemod to each Go file in
 // `directory` and its subdirectories.
 //
+// Replacements are applied to every file.
+//
 // The vendor folder is ignored.
-func applyCodemodsToDirectory(directory string, replacements map[string]string, codemods []Codemod) (err error) {
+func applyCodemodsToDirectory(directory string, replacements map[string]string, codemods []sourceFileCodemod) (err error) {
+	// If we have nothing to do with the repository files,
+	// we won't wast time traversing the directory.
+	if len(replacements) == 0 && len(codemods) == 0 {
+		return nil
+	}
+
 	defer func() {
 		if reason := recover(); reason != nil {
 			panicErr, ok := reason.(error)
@@ -85,9 +93,7 @@ func applyCodemodsToDirectory(directory string, replacements map[string]string, 
 					return errors.WithStack(err)
 				}
 
-				if f, ok := mod.Transform.(func(*codemod.SourceFile)); ok {
-					f(code)
-				}
+				mod.transform(code)
 
 				sourceCode = code.SourceCode()
 				if err != nil {
