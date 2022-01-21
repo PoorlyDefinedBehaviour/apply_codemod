@@ -254,11 +254,30 @@ func Apply(ctx context.Context, codemods []Codemod) error {
 		return errors.WithStack(err)
 	}
 
+	applier.setCodemods(codemods)
+
 	if err := applier.apply(ctx); err != nil {
 		return errors.WithStack(err)
 	}
 
 	return nil
+}
+
+func (applier *Applier) setCodemods(codemods []Codemod) {
+	for _, mod := range codemods {
+		switch transform := mod.Transform.(type) {
+		case func(codemod.Project):
+			applier.projectCodemods = append(applier.projectCodemods, projectCodemod{
+				description: mod.Description,
+				transform:   transform,
+			})
+		case func(*codemod.SourceFile):
+			applier.sourceFileCodemods = append(applier.sourceFileCodemods, sourceFileCodemod{
+				description: mod.Description,
+				transform:   transform,
+			})
+		}
+	}
 }
 
 func (applier *Applier) apply(ctx context.Context) error {
