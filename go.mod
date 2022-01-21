@@ -1,4 +1,4 @@
-module apply_codemod
+module github.com/PoorlyDefinedBehaviour/apply_codemod
 
 go 1.16
 
