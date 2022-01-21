@@ -38,6 +38,12 @@ func compileRegexes(regexes map[string]string) (map[*regexp.Regexp]string, error
 //
 // The vendor folder is ignored.
 func applyCodemodsToDirectory(directory string, replacements map[string]string, codemods []sourceFileCodemod) (err error) {
+	// If we have nothing to do with the repository files,
+	// we won't wast time traversing the directory.
+	if len(replacements) == 0 && len(codemods) == 0 {
+		return nil
+	}
+
 	defer func() {
 		if reason := recover(); reason != nil {
 			panicErr, ok := reason.(error)

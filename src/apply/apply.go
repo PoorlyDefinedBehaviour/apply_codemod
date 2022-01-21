@@ -388,8 +388,6 @@ type repositoryWithError struct {
 // Pull requests with the changes are created, if there are
 // changed files after codemods have been applied.
 func (applier *Applier) applyCodemodsToRemoteRepositories(ctx context.Context, repositories []Repository) applyCodemodResult {
-	fmt.Printf("applying codemods to %d repositories\n", len(repositories))
-
 	resultLock := sync.Mutex{}
 	result := applyCodemodResult{}
 
@@ -474,10 +472,8 @@ func (applier *Applier) applyCodemodsToRemoteRepositories(ctx context.Context, r
 					mod.transform(codemod.Project{})
 				}
 
-				if len(applier.sourceFileCodemods) > 0 {
-					if err := applyCodemodsToDirectory(tempFolder, applier.args.Replacements, applier.sourceFileCodemods); err != nil {
-						return pullRequestURL, err
-					}
+				if err := applyCodemodsToDirectory(tempFolder, applier.args.Replacements, applier.sourceFileCodemods); err != nil {
+					return pullRequestURL, err
 				}
 
 				if err := os.Chdir(originalDir); err != nil {
@@ -573,10 +569,8 @@ func (applier *Applier) applyCodemodsLocally(ctx context.Context) error {
 		mod.transform(codemod.Project{})
 	}
 
-	if len(applier.sourceFileCodemods) > 0 {
-		if err := applyCodemodsToDirectory(*applier.args.LocalDirectory, applier.args.Replacements, applier.sourceFileCodemods); err != nil {
-			return errors.WithStack(err)
-		}
+	if err := applyCodemodsToDirectory(*applier.args.LocalDirectory, applier.args.Replacements, applier.sourceFileCodemods); err != nil {
+		return errors.WithStack(err)
 	}
 
 	if err := os.Chdir(originalDir); err != nil {
@@ -597,6 +591,8 @@ func (applier *Applier) buildPullRequestDescription() string {
 			builder.WriteString(" => ")
 			builder.WriteString(replacement)
 		}
+
+		builder.WriteString("\n\n")
 	}
 
 	if len(applier.projectCodemods) > 0 || len(applier.sourceFileCodemods) > 0 {
