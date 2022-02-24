@@ -130,6 +130,8 @@ func (repo *Repository) DefaultBranch() (string, error) {
 }
 
 func (repo *Repository) Checkout(options CheckoutOptions) error {
+	fmt.Printf("changing branch. branch=%s\n", options.Branch)
+
 	worktree, err := repo.repo.Worktree()
 	if err != nil {
 		return errors.WithStack(err)

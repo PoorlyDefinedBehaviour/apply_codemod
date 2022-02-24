@@ -158,7 +158,7 @@ func Test_New(t *testing.T) {
 			GithubToken:     "token",
 			RepoNameMatches: &repoNameMatches,
 			LocalDirectory:  &localDir,
-			Repositories:    map[string]string{},
+			Repositories:    make([]string, 0),
 			Replacements:    map[string]string{},
 		}
 

@@ -1,6 +1,7 @@
 package apply
 
 import (
+	"fmt"
 	"io/fs"
 	"io/ioutil"
 	"os"
@@ -38,6 +39,7 @@ func compileRegexes(regexes map[string]string) (map[*regexp.Regexp]string, error
 //
 // The vendor folder is ignored.
 func applyCodemodsToDirectory(directory string, replacements map[string]string, codemods []sourceFileCodemod) (err error) {
+	fmt.Printf("applying source file codemods and replacements . num_source_file_codemods=%d replacements=%+v\n", len(codemods), replacements)
 	// If we have nothing to do with the repository files,
 	// we won't wast time traversing the directory.
 	if len(replacements) == 0 && len(codemods) == 0 {

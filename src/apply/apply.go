@@ -58,7 +58,7 @@ type CliArgs struct {
 	// Should be possible to clone, create branches and
 	// create pull requests for each repository
 	// using the github token provided.
-	Repositories map[string]string `long:"repos" description:"list of repositories to apply codemod to. should be a list of repository_url:branch"`
+	Repositories []string `long:"repos" description:"list of repositories to apply codemod to"`
 	//
 	//
 	// Should be in the format regex_to_match:new_value.
@@ -147,67 +147,114 @@ func (applier *Applier) ShouldApplyLocally() bool {
 //
 // Otherwise, gets repositories from github using the username or organization
 // provided by the user in the command line.
-func (applier *Applier) getRepositories(ctx context.Context) (out []Repository, err error) {
+func (applier *Applier) getRepositories(ctx context.Context) ([]Repository, error) {
 	if len(applier.args.Repositories) > 0 {
-		for repoURL, branch := range applier.args.Repositories {
-			branch := branch
-			out = append(out, Repository{URL: repoURL, Branch: &branch})
-		}
-	} else {
-		var query string
+		repos := make([]Repository, 0, len(applier.args.Repositories))
 
-		if applier.args.GithubOrg != nil {
-			query = fmt.Sprintf("org:%s", *applier.args.GithubOrg)
-		} else if applier.args.GithubUser != nil {
-			query = fmt.Sprintf("user:%s", *applier.args.GithubUser)
+		for _, repoURL := range applier.args.Repositories {
+			repos = append(repos, Repository{URL: repoURL})
 		}
 
-		if applier.args.RepoContains != nil {
-			query = fmt.Sprintf("%s %s", *applier.args.RepoContains, query)
+		return repos, nil
+	}
 
-			fmt.Printf("code searching. query=%s\n", query)
+	repos := make([]Repository, 0)
 
-			searchResult, err := applier.githubClient.CodeSearch(ctx, query)
-			if err != nil {
-				return out, errors.WithStack(err)
-			}
+	var query string
 
-			for _, result := range searchResult.CodeResults {
-				textMatches := make([]TextMatch, 0, len(result.TextMatches))
+	if applier.args.GithubOrg != nil {
+		query = fmt.Sprintf("org:%s", *applier.args.GithubOrg)
+	} else if applier.args.GithubUser != nil {
+		query = fmt.Sprintf("user:%s", *applier.args.GithubUser)
+	}
 
-				for _, textMatch := range result.TextMatches {
-					textMatches = append(textMatches, TextMatch{
-						Fragment: *textMatch.Fragment,
-						Match:    *textMatch.Matches[0].Text,
-					})
-				}
-				out = append(out, Repository{
-					URL:         *result.Repository.HTMLURL,
-					TextMatches: textMatches,
-					// We don't know which branch is the default.
-					Branch: nil,
+	if applier.args.RepoContains != nil {
+		query = fmt.Sprintf("%s %s", *applier.args.RepoContains, query)
+
+		fmt.Printf("code searching. query=%s\n", query)
+
+		searchResult, err := applier.githubClient.CodeSearch(ctx, query)
+		if err != nil {
+			return repos, errors.WithStack(err)
+		}
+
+		for _, result := range searchResult.CodeResults {
+			textMatches := make([]TextMatch, 0, len(result.TextMatches))
+
+			for _, textMatch := range result.TextMatches {
+				textMatches = append(textMatches, TextMatch{
+					Fragment: *textMatch.Fragment,
+					Match:    *textMatch.Matches[0].Text,
 				})
 			}
-		} else if applier.args.RepoNameMatches != nil {
-			query = fmt.Sprintf("%s %s", *applier.args.RepoContains, query)
+			repos = append(repos, Repository{
+				URL:         *result.Repository.HTMLURL,
+				TextMatches: textMatches,
+			})
+		}
+	} else if applier.args.RepoNameMatches != nil {
+		query = fmt.Sprintf("%s %s", *applier.args.RepoContains, query)
 
-			fmt.Printf("repository searching. query=%s\n", query)
+		fmt.Printf("repository searching. query=%s\n", query)
 
-			searchResult, err := applier.githubClient.RepositorySearch(ctx, query)
-			if err != nil {
-				return out, errors.WithStack(err)
-			}
+		searchResult, err := applier.githubClient.RepositorySearch(ctx, query)
+		if err != nil {
+			return repos, errors.WithStack(err)
+		}
 
-			for _, repository := range searchResult.Repositories {
-				out = append(out, Repository{
-					URL:    *repository.HTMLURL,
-					Branch: repository.DefaultBranch,
-				})
-			}
+		for _, repository := range searchResult.Repositories {
+			repos = append(repos, Repository{
+				URL: *repository.HTMLURL,
+			})
 		}
 	}
 
-	return out, nil
+	repositoriesThatUserWants := make([]Repository, 0)
+
+	for i, repository := range repos {
+		prompt := fmt.Sprintf(`\
+Repository %s has %d matches.
+
+The first match is:
+
+~~~
+
+%s
+
+~~~
+
+Do you want to apply codemods to %s ?
+`,
+			color.GreenString(repository.URL),
+			len(repository.TextMatches),
+			strings.ReplaceAll(
+				repository.TextMatches[0].Fragment,
+				repository.TextMatches[0].Match,
+				color.GreenString(repository.TextMatches[0].Match),
+			),
+			repository.URL,
+		)
+		answer, err := applier.ui.Select(prompt, []string{"yes", "no", "yes to all"}, &input.Options{
+			Required: true,
+			Loop:     true,
+		})
+		if err != nil {
+			return repos, errors.WithStack(err)
+		}
+
+		if answer == "yes" {
+			repositoriesThatUserWants = append(repositoriesThatUserWants, repository)
+		} else if answer == "yes to all" {
+			// "yes to all" means:
+			//
+			// I want to keep the current repository and every other repository
+			// that comes after it.
+			repositoriesThatUserWants = append(repositoriesThatUserWants, repos[i:]...)
+			break
+		}
+	}
+
+	return repositoriesThatUserWants, nil
 }
 
 type Range struct {
@@ -228,10 +275,6 @@ type TextMatch struct {
 type Repository struct {
 	// The repository url, used to git clone.
 	URL string
-	// The branch to which the codemods should be applied.
-	//
-	// Codemods are applied to the default branch if the branch is not specified.
-	Branch *string
 	// List of text matches returned by the Github code search api.
 	//
 	// Note that the list will be empty if the Github code search api wasn't used.
@@ -260,6 +303,10 @@ func Apply(ctx context.Context, codemods []Codemod) error {
 	}
 
 	return nil
+}
+
+func (applier *Applier) repositoriesFoundUsingCodeSearch() bool {
+	return len(applier.args.Repositories) == 0
 }
 
 func (applier *Applier) setCodemods(codemods []Codemod) {
@@ -292,54 +339,9 @@ func (applier *Applier) apply(ctx context.Context) error {
 			return errors.WithStack(err)
 		}
 
-		fmt.Printf("found %d repositories", len(repositories))
+		fmt.Printf("found %d repositories\n", len(repositories))
 
-		repositoriesThatUserWants := make([]Repository, 0)
-
-		for i, repository := range repositories {
-			prompt := fmt.Sprintf(`\
-Repository %s has %d matches.
-
-The first match is:
-
-~~~
-
-%s
-
-~~~
-
-Do you want to apply codemods to %s ?
-`,
-				color.GreenString(repository.URL),
-				len(repository.TextMatches),
-				strings.ReplaceAll(
-					repository.TextMatches[0].Fragment,
-					repository.TextMatches[0].Match,
-					color.GreenString(repository.TextMatches[0].Match),
-				),
-				repository.URL,
-			)
-			answer, err := applier.ui.Select(prompt, []string{"yes", "no", "yes to all"}, &input.Options{
-				Required: true,
-				Loop:     true,
-			})
-			if err != nil {
-				return errors.WithStack(err)
-			}
-
-			if answer == "yes" {
-				repositoriesThatUserWants = append(repositoriesThatUserWants, repository)
-			} else if answer == "yes to all" {
-				// "yes to all" means:
-				//
-				// I want to keep the current repository and every other repository
-				// that comes after it.
-				repositoriesThatUserWants = append(repositoriesThatUserWants, repositories[i:]...)
-				break
-			}
-		}
-
-		results := applier.applyCodemodsToRemoteRepositories(ctx, repositoriesThatUserWants)
+		results := applier.applyCodemodsToRemoteRepositories(ctx, repositories)
 
 		fmt.Printf("%s %s: %d repositories\n", color.BlueString("-"), color.BlueString("NOT CHANGED"), len(results.NotChanged))
 
@@ -413,11 +415,13 @@ func (applier *Applier) applyCodemodsToRemoteRepositories(ctx context.Context, r
 					AccessToken: applier.args.GithubToken,
 				})
 
-				repoTempFolder := fmt.Sprintf("%s/%s", tempFolder, repository.URL)
+				repoTempFolder := fmt.Sprintf("%s/%s", tempFolder, uuid.NewString())
 
 				if err := os.RemoveAll(repoTempFolder); err != nil {
 					return pullRequestURL, err
 				}
+
+				fmt.Printf("cloning repository. url=%s folder=%s\n", repository.URL, repoTempFolder)
 
 				repo, err := githubClient.Clone(github.CloneOptions{
 					RepoURL: repository.URL,
@@ -431,20 +435,17 @@ func (applier *Applier) applyCodemodsToRemoteRepositories(ctx context.Context, r
 				// we won't know which branch to apply codemods to.
 				//
 				// Because of that, we try to apply them to the default branch.
-				if repository.Branch == nil {
-					branch, err := repo.DefaultBranch()
-					if err != nil {
-						return pullRequestURL, err
-					}
 
-					repository.Branch = &branch
+				branch, err := repo.DefaultBranch()
+				if err != nil {
+					return pullRequestURL, err
 				}
 
 				err = repo.Checkout(github.CheckoutOptions{
-					Branch: *repository.Branch,
+					Branch: branch,
 				})
 				if err != nil {
-					return pullRequestURL, errors.Wrapf(err, "git checkout %s failed in %s", *repository.Branch, repository.URL)
+					return pullRequestURL, errors.Wrapf(err, "git checkout %s failed in %s", branch, repository.URL)
 				}
 
 				codemodBranch := uuid.New().String()
@@ -463,15 +464,17 @@ func (applier *Applier) applyCodemodsToRemoteRepositories(ctx context.Context, r
 					return pullRequestURL, err
 				}
 
-				if err := os.Chdir(tempFolder); err != nil {
+				if err := os.Chdir(repoTempFolder); err != nil {
 					return pullRequestURL, err
 				}
+
+				fmt.Printf("applying project codemods. num_project_codemods=%d\n", len(applier.projectCodemods))
 
 				for _, mod := range applier.projectCodemods {
 					mod.transform(codemod.Project{})
 				}
 
-				if err := applyCodemodsToDirectory(tempFolder, applier.args.Replacements, applier.sourceFileCodemods); err != nil {
+				if err := applyCodemodsToDirectory(repoTempFolder, applier.args.Replacements, applier.sourceFileCodemods); err != nil {
 					return pullRequestURL, err
 				}
 
@@ -512,7 +515,7 @@ func (applier *Applier) applyCodemodsToRemoteRepositories(ctx context.Context, r
 					RepoURL:     repository.URL,
 					Title:       "[AUTO GENERATED] applied codemods",
 					FromBranch:  codemodBranch,
-					ToBranch:    *repository.Branch,
+					ToBranch:    branch,
 					Description: applier.buildPullRequestDescription(),
 				})
 				if err != nil {
